@@ -74,6 +74,43 @@ Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/sos -ContentType '
 
 La respuesta creada contiene `status: "active"`. El dashboard consume `GET /api/sos/active`, que devuelve los arreglos `emergencies` y `finalized`.
 
+## API v2 (A3)
+
+La API v2 amplía el backend sin retirar ni cambiar las rutas existentes que utiliza el reloj. Cada emergencia ahora incluye `track`, un arreglo cronológico de puntos `{ lat, lng, accuracy, timestamp }` con un máximo de 300 elementos. Las respuestas de creación, ubicación, acuse y finalización incluyen la emergencia completa.
+
+### Acuse de recibo
+
+El contacto puede indicar que va en camino mientras la emergencia está activa:
+
+```powershell
+$body = @{ contactName = 'Ana López' } | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri 'http://localhost:3000/api/sos/ID_DE_EMERGENCIA/ack' `
+  -ContentType 'application/json' -Body $body
+```
+
+La respuesta agrega `acknowledgedBy` y `acknowledgedAt` (fecha ISO 8601). Repetir la solicitud actualiza el nombre; un cuerpo sin `contactName` válido responde 400 y una emergencia inexistente o finalizada responde 404.
+
+### Eventos en tiempo real
+
+`GET /api/sos/stream` mantiene una conexión Server-Sent Events. Primero entrega el evento `snapshot` con `{ emergencies, finalized }`; después puede entregar `sos-created`, `sos-location`, `sos-ack` y `sos-finalized`, cada uno con la emergencia completa en `data`. Desde PowerShell se puede observar el flujo con `curl.exe`:
+
+```powershell
+curl.exe -N http://localhost:3000/api/sos/stream
+```
+
+El endpoint anterior `GET /api/sos/active` sigue disponible para consultar el estado mediante polling.
+
+### Simular una emergencia
+
+Desde PowerShell en la raíz del proyecto, ejecuta el script sin instalar dependencias:
+
+```powershell
+.\scripts\simular-sos.ps1
+```
+
+Acepta `-Url` (por defecto `http://localhost:3000`), `-Nombre` (por defecto `Usuario simulado`), `-Puntos` (por defecto 20 ubicaciones) y `-Intervalo` (segundos entre ubicaciones, por defecto 3). Crea el SOS en la UTSLRC, envía las ubicaciones de la ruta y lo cancela al terminar. Si se interrumpe con Ctrl+C, intenta cancelar el SOS simulado.
+
 ## Si no compila en otra máquina
 
 En Android Studio, abre **Settings > Build Tools > Gradle > Gradle JDK** y selecciona **JDK 21** (no JDK 25). Instala también el SDK de Android que requiera el proyecto desde el SDK Manager.
