@@ -56,6 +56,8 @@ function createApp() {
       startedAt: new Date().toISOString(),
       cancelledAt: null,
       track: [locationPoint({ lat, lng, accuracy, timestamp })],
+      acknowledgedBy: null,
+      acknowledgedAt: null,
     };
     emergencies.set(emergencyId, emergency);
     return response.status(201).json(emergency);
@@ -82,6 +84,26 @@ function createApp() {
     emergency.lastLocationAt = timestamp;
     emergency.track.push(locationPoint({ lat, lng, accuracy, timestamp }));
     if (emergency.track.length > 300) emergency.track.shift();
+    return response.json(emergency);
+  });
+
+  app.post("/api/sos/:id/ack", (request, response) => {
+    const emergency = emergencies.get(request.params.id);
+    if (!emergency || emergency.status !== "active") {
+      return response.status(404).json({ error: "No existe una emergencia activa con ese ID." });
+    }
+
+    const { contactName } = request.body ?? {};
+    if (
+      typeof contactName !== "string" ||
+      !contactName.trim() ||
+      contactName.trim().length > 80
+    ) {
+      return response.status(400).json({ error: "El nombre del contacto es inválido." });
+    }
+
+    emergency.acknowledgedBy = contactName.trim();
+    emergency.acknowledgedAt = new Date().toISOString();
     return response.json(emergency);
   });
 
