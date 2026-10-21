@@ -6,12 +6,18 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const markers = new Map();
 const markerAnimations = new Map();
+const tracks = new Map();
 const emergenciesList = document.getElementById("emergencies");
 const emptyState = document.getElementById("empty-state");
 const connection = document.getElementById("connection");
 const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 5 });
 let focusSignature = null;
 let lastFocus = null;
+let currentEmergencies = [];
+let currentFinalized = [];
+let eventSource = null;
+let pollingTimer = null;
+let retryTimer = null;
 
 function updateList(emergencies, finalized) {
   emergenciesList.replaceChildren();
@@ -31,89 +37,186 @@ function updateList(emergencies, finalized) {
     const locationTime = emergency.lastLocationAt ?? emergency.timestamp;
     updated.textContent = `Última ubicación: ${new Date(locationTime).toLocaleTimeString("es-MX")}`;
     item.append(name, status, position, updated);
+    if (emergency.acknowledgedBy) {
+      const acknowledged = document.createElement("span");
+      acknowledged.textContent = `Contacto en camino: ${emergency.acknowledgedBy}`;
+      item.append(acknowledged);
+    }
     emergenciesList.append(item);
   }
 }
 
-async function refreshEmergencies() {
+async function loadEmergencies() {
   try {
     const response = await fetch("/api/sos/active", { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const { emergencies, finalized = [] } = await response.json();
-    connection.textContent = "Backend conectado";
-    connection.className = "connection online";
-    updateList(emergencies, finalized);
-
-    const visibleEmergencies = [...emergencies, ...finalized];
-    const visibleIds = new Set(visibleEmergencies.map((emergency) => emergency.id));
-    for (const [id, marker] of markers) {
-      if (!visibleIds.has(id)) {
-        const animation = markerAnimations.get(id);
-        if (animation !== undefined) window.cancelAnimationFrame(animation);
-        markerAnimations.delete(id);
-        map.removeLayer(marker);
-        markers.delete(id);
-      }
-    }
-
-    for (const emergency of visibleEmergencies) {
-      const position = [emergency.lat, emergency.lng];
-      const marker = markers.get(emergency.id);
-      const finalizedStatus = emergency.status === "finalized";
-      const status = finalizedStatus ? "Finalizada" : "SOS activo";
-      const popup = `<strong>${escapeHtml(emergency.name)}</strong><br>${escapeHtml(status)}<br>${numberFormat.format(emergency.lat)}, ${numberFormat.format(emergency.lng)}`;
-      if (marker) {
-        if (finalizedStatus) {
-          const animation = markerAnimations.get(emergency.id);
-          if (animation !== undefined) window.cancelAnimationFrame(animation);
-          markerAnimations.delete(emergency.id);
-          marker.setLatLng(position).setOpacity(0.65);
-        } else {
-          animateMarker(emergency.id, marker, position);
-        }
-        marker.setPopupContent(popup);
-      } else {
-        markers.set(
-          emergency.id,
-          L.marker(position, { opacity: finalizedStatus ? 0.65 : 1 }).addTo(map).bindPopup(popup),
-        );
-      }
-    }
-
-    const nextFocusSignature = emergencies.map((emergency) => emergency.id).sort().join(",");
-    if (emergencies.length === 1) {
-      const [emergency] = emergencies;
-      const position = [emergency.lat, emergency.lng];
-      const movedFarEnough = !lastFocus || distanceInMeters(lastFocus, position) >= 35;
-      if (
-        nextFocusSignature !== focusSignature ||
-        movedFarEnough ||
-        map.getZoom() < 15
-      ) {
-        map.flyTo(position, Math.max(map.getZoom(), 15), { duration: 1.2 });
-        lastFocus = position;
-      }
-      focusSignature = nextFocusSignature;
-    } else if (emergencies.length > 1) {
-      if (nextFocusSignature !== focusSignature) {
-        map.fitBounds(
-          emergencies.map((emergency) => [emergency.lat, emergency.lng]),
-          { padding: [32, 32], maxZoom: 15 },
-        );
-      }
-      focusSignature = nextFocusSignature;
-      lastFocus = null;
-    } else {
-      focusSignature = null;
-      lastFocus = null;
-    }
+    const state = await response.json();
+    currentEmergencies = state.emergencies;
+    currentFinalized = state.finalized ?? [];
+    renderDashboard();
   } catch (error) {
-    connection.textContent = "Backend no disponible";
-    connection.className = "connection offline";
     console.error("No se pudo actualizar el dashboard:", error);
   }
+}
+
+function renderDashboard() {
+  const emergencies = currentEmergencies;
+  const finalized = currentFinalized;
+  updateList(emergencies, finalized);
+
+  const visibleEmergencies = [...emergencies, ...finalized];
+  const visibleIds = new Set(visibleEmergencies.map((emergency) => emergency.id));
+  for (const [id, marker] of markers) {
+    if (!visibleIds.has(id)) {
+      const animation = markerAnimations.get(id);
+      if (animation !== undefined) window.cancelAnimationFrame(animation);
+      markerAnimations.delete(id);
+      map.removeLayer(marker);
+      markers.delete(id);
+    }
+  }
+
+  const activeIds = new Set(emergencies.map((emergency) => emergency.id));
+  for (const [id, track] of tracks) {
+    if (!activeIds.has(id)) {
+      map.removeLayer(track);
+      tracks.delete(id);
+    }
+  }
+
+  for (const emergency of visibleEmergencies) {
+    const position = [emergency.lat, emergency.lng];
+    const marker = markers.get(emergency.id);
+    const finalizedStatus = emergency.status === "finalized";
+    const status = finalizedStatus ? "Finalizada" : "SOS activo";
+    const popup = `<strong>${escapeHtml(emergency.name)}</strong><br>${escapeHtml(status)}<br>${numberFormat.format(emergency.lat)}, ${numberFormat.format(emergency.lng)}`;
+    if (marker) {
+      if (finalizedStatus) {
+        const animation = markerAnimations.get(emergency.id);
+        if (animation !== undefined) window.cancelAnimationFrame(animation);
+        markerAnimations.delete(emergency.id);
+        marker.setLatLng(position).setOpacity(0.65);
+      } else {
+        animateMarker(emergency.id, marker, position);
+      }
+      marker.setPopupContent(popup);
+    } else {
+      markers.set(
+        emergency.id,
+        L.marker(position, { opacity: finalizedStatus ? 0.65 : 1 }).addTo(map).bindPopup(popup),
+      );
+    }
+
+    if (!finalizedStatus && emergency.track?.length) {
+      const coordinates = emergency.track.map((point) => [point.lat, point.lng]);
+      const track = tracks.get(emergency.id);
+      if (track) {
+        track.setLatLngs(coordinates);
+      } else {
+        tracks.set(
+          emergency.id,
+          L.polyline(coordinates, { color: "red", weight: 4 }).addTo(map),
+        );
+      }
+    }
+  }
+
+  const nextFocusSignature = emergencies.map((emergency) => emergency.id).sort().join(",");
+  if (emergencies.length === 1) {
+    const [emergency] = emergencies;
+    const position = [emergency.lat, emergency.lng];
+    const movedFarEnough = !lastFocus || distanceInMeters(lastFocus, position) >= 35;
+    if (
+      nextFocusSignature !== focusSignature ||
+      movedFarEnough ||
+      map.getZoom() < 15
+    ) {
+      map.flyTo(position, Math.max(map.getZoom(), 15), { duration: 1.2 });
+      lastFocus = position;
+    }
+    focusSignature = nextFocusSignature;
+  } else if (emergencies.length > 1) {
+    if (nextFocusSignature !== focusSignature) {
+      map.fitBounds(
+        emergencies.map((emergency) => [emergency.lat, emergency.lng]),
+        { padding: [32, 32], maxZoom: 15 },
+      );
+    }
+    focusSignature = nextFocusSignature;
+    lastFocus = null;
+  } else {
+    focusSignature = null;
+    lastFocus = null;
+  }
+}
+
+function replaceEmergency(emergency) {
+  currentEmergencies = currentEmergencies.filter(({ id }) => id !== emergency.id);
+  currentFinalized = currentFinalized.filter(({ id }) => id !== emergency.id);
+  if (emergency.status === "finalized") {
+    currentFinalized = [emergency, ...currentFinalized];
+  } else {
+    currentEmergencies = [emergency, ...currentEmergencies];
+  }
+  renderDashboard();
+}
+
+function setConnectionStatus(text, online) {
+  connection.textContent = text;
+  connection.className = `connection ${online ? "online" : "offline"}`;
+}
+
+function startPolling() {
+  if (pollingTimer === null) {
+    pollingTimer = window.setInterval(loadEmergencies, 2000);
+  }
+  setConnectionStatus("Reconectando (polling)", false);
+  loadEmergencies();
+}
+
+function connectSse() {
+  if (retryTimer !== null) {
+    window.clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+
+  const source = new EventSource("/api/sos/stream");
+  eventSource = source;
+  source.addEventListener("snapshot", (event) => {
+    if (eventSource !== source) return;
+    const state = JSON.parse(event.data);
+    currentEmergencies = state.emergencies;
+    currentFinalized = state.finalized;
+    renderDashboard();
+    setConnectionStatus("En vivo (SSE)", true);
+    if (pollingTimer !== null) {
+      window.clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+  });
+
+  for (const eventName of ["sos-created", "sos-location", "sos-ack", "sos-finalized"]) {
+    source.addEventListener(eventName, (event) => {
+      if (eventSource !== source) return;
+      replaceEmergency(JSON.parse(event.data));
+      setConnectionStatus("En vivo (SSE)", true);
+    });
+  }
+
+  source.onerror = () => {
+    if (eventSource !== source) return;
+    source.close();
+    eventSource = null;
+    startPolling();
+    if (retryTimer === null) {
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        connectSse();
+      }, 10_000);
+    }
+  };
 }
 
 function animateMarker(id, marker, target) {
@@ -165,5 +268,5 @@ function escapeHtml(value) {
   })[character]);
 }
 
-refreshEmergencies();
-window.setInterval(refreshEmergencies, 2000);
+startPolling();
+connectSse();
