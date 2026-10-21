@@ -13,6 +13,10 @@ function isCoordinatePair(body) {
   );
 }
 
+function locationPoint({ lat, lng, accuracy, timestamp }) {
+  return { lat, lng, accuracy: accuracy ?? null, timestamp };
+}
+
 function createApp() {
   const app = express();
   const emergencies = new Map();
@@ -51,6 +55,7 @@ function createApp() {
       status: "active",
       startedAt: new Date().toISOString(),
       cancelledAt: null,
+      track: [locationPoint({ lat, lng, accuracy, timestamp })],
     };
     emergencies.set(emergencyId, emergency);
     return response.status(201).json(emergency);
@@ -75,6 +80,8 @@ function createApp() {
     emergency.lng = lng;
     emergency.accuracy = accuracy ?? null;
     emergency.lastLocationAt = timestamp;
+    emergency.track.push(locationPoint({ lat, lng, accuracy, timestamp }));
+    if (emergency.track.length > 300) emergency.track.shift();
     return response.json(emergency);
   });
 
