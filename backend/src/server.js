@@ -20,6 +20,25 @@ function locationPoint({ lat, lng, accuracy, timestamp }) {
 function createApp() {
   const app = express();
   const emergencies = new Map();
+  const streamClients = new Set();
+  let heartbeat = null;
+
+  function sendEvent(response, event, data) {
+    if (!response.destroyed && !response.writableEnded) {
+      response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+  }
+
+  function publish(event, emergency) {
+    for (const client of streamClients) sendEvent(client, event, emergency);
+  }
+
+  function stopHeartbeatIfIdle() {
+    if (streamClients.size === 0 && heartbeat !== null) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
+  }
 
   app.use(express.json({ limit: "16kb" }));
   app.use("/dashboard", express.static(path.join(__dirname, "..", "public")));
@@ -60,6 +79,7 @@ function createApp() {
       acknowledgedAt: null,
     };
     emergencies.set(emergencyId, emergency);
+    publish("sos-created", emergency);
     return response.status(201).json(emergency);
   });
 
@@ -84,6 +104,7 @@ function createApp() {
     emergency.lastLocationAt = timestamp;
     emergency.track.push(locationPoint({ lat, lng, accuracy, timestamp }));
     if (emergency.track.length > 300) emergency.track.shift();
+    publish("sos-location", emergency);
     return response.json(emergency);
   });
 
@@ -104,6 +125,7 @@ function createApp() {
 
     emergency.acknowledgedBy = contactName.trim();
     emergency.acknowledgedAt = new Date().toISOString();
+    publish("sos-ack", emergency);
     return response.json(emergency);
   });
 
@@ -116,7 +138,39 @@ function createApp() {
     emergency.status = "finalized";
     emergency.cancelledAt = new Date().toISOString();
     emergency.finishedAt = emergency.cancelledAt;
+    publish("sos-finalized", emergency);
     return response.json(emergency);
+  });
+
+  app.get("/api/sos/stream", (_request, response) => {
+    response.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    response.flushHeaders();
+    streamClients.add(response);
+
+    const active = [...emergencies.values()].filter(
+      (emergency) => emergency.status === "active",
+    );
+    const finalized = [...emergencies.values()].filter(
+      (emergency) => emergency.status === "finalized",
+    );
+    sendEvent(response, "snapshot", { emergencies: active, finalized });
+
+    if (heartbeat === null) {
+      heartbeat = setInterval(() => {
+        for (const client of streamClients) {
+          if (!client.destroyed && !client.writableEnded) client.write(": ping\n\n");
+        }
+      }, 15_000);
+    }
+
+    response.on("close", () => {
+      streamClients.delete(response);
+      stopHeartbeatIfIdle();
+    });
   });
 
   app.get("/api/sos/active", (_request, response) => {
