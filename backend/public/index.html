@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SOS Wear | Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    >
+    <link rel="stylesheet" href="/dashboard/styles.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">MONITOREO LOCAL</p>
+        <h1>Emergencias activas</h1>
+      </div>
+      <p id="connection" class="connection">Conectando…</p>
+    </header>
+    <main>
+      <section class="sidebar" aria-label="Emergencias">
+        <h2>Dispositivos</h2>
+        <p id="empty-state">Esperando una señal SOS…</p>
+        <ul id="emergencies"></ul>
+        <p class="footnote">Actualización automática cada 2 segundos</p>
+      </section>
+      <div id="map" aria-label="Mapa de ubicación SOS"></div>
+    </main>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/dashboard/app.js"></script>
+  </body>
+</html>

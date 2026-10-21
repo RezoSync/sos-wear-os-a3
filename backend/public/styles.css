@@ -1,0 +1,152 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #101318;
+  color: #f4f6f8;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 88px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #282d35;
+  background: #171b22;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #ff6268;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 21px;
+}
+
+.connection {
+  margin: 0;
+  color: #9aa3af;
+  font-size: 13px;
+}
+
+.connection.online {
+  color: #68d391;
+}
+
+.connection.offline {
+  color: #ff777d;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(250px, 340px) 1fr;
+  min-height: calc(100vh - 88px);
+}
+
+.sidebar {
+  padding: 24px 20px;
+  border-right: 1px solid #282d35;
+}
+
+.sidebar h2 {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+#empty-state {
+  color: #89919d;
+  font-size: 13px;
+}
+
+#emergencies {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emergency-card {
+  padding: 14px;
+  border: 1px solid #39333a;
+  border-radius: 12px;
+  background: #211b20;
+}
+
+.emergency-card strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #ff777d;
+}
+
+.emergency-card.finalized {
+  border-color: #383e47;
+  background: #1b2027;
+}
+
+.emergency-card.finalized strong {
+  color: #b2bbc7;
+}
+
+.emergency-card span {
+  display: block;
+  margin-top: 4px;
+  color: #c1c7d0;
+  font-size: 12px;
+}
+
+.emergency-card .emergency-status {
+  color: #ff777d;
+  font-weight: 700;
+}
+
+.emergency-card.finalized .emergency-status {
+  color: #68d391;
+}
+
+.footnote {
+  margin-top: 24px;
+  color: #747e8b;
+  font-size: 11px;
+}
+
+#map {
+  min-height: 500px;
+  background: #20262e;
+}
+
+@media (max-width: 700px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #282d35;
+  }
+
+  #map {
+    min-height: 58vh;
+  }
+}

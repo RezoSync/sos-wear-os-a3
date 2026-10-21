@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="SOS Wear"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Ruta de prueba SOS Wear</name>
+    <time>2026-10-19T12:00:00Z</time>
+  </metadata>
+  <trk>
+    <name>Recorrido corto en Ciudad de México</name>
+    <trkseg>
+      <trkpt lat="19.43260" lon="-99.13320"><ele>2240</ele><time>2026-10-19T12:00:00Z</time></trkpt>
+      <trkpt lat="19.43275" lon="-99.13265"><ele>2240</ele><time>2026-10-19T12:00:05Z</time></trkpt>
+      <trkpt lat="19.43292" lon="-99.13210"><ele>2241</ele><time>2026-10-19T12:00:10Z</time></trkpt>
+      <trkpt lat="19.43312" lon="-99.13155"><ele>2241</ele><time>2026-10-19T12:00:15Z</time></trkpt>
+      <trkpt lat="19.43338" lon="-99.13102"><ele>2242</ele><time>2026-10-19T12:00:20Z</time></trkpt>
+      <trkpt lat="19.43368" lon="-99.13052"><ele>2242</ele><time>2026-10-19T12:00:25Z</time></trkpt>
+      <trkpt lat="19.43400" lon="-99.13005"><ele>2243</ele><time>2026-10-19T12:00:30Z</time></trkpt>
+      <trkpt lat="19.43434" lon="-99.12960"><ele>2243</ele><time>2026-10-19T12:00:35Z</time></trkpt>
+      <trkpt lat="19.43400" lon="-99.13005"><ele>2243</ele><time>2026-10-19T12:00:40Z</time></trkpt>
+      <trkpt lat="19.43368" lon="-99.13052"><ele>2242</ele><time>2026-10-19T12:00:45Z</time></trkpt>
+      <trkpt lat="19.43338" lon="-99.13102"><ele>2242</ele><time>2026-10-19T12:00:50Z</time></trkpt>
+      <trkpt lat="19.43312" lon="-99.13155"><ele>2241</ele><time>2026-10-19T12:00:55Z</time></trkpt>
+      <trkpt lat="19.43292" lon="-99.13210"><ele>2241</ele><time>2026-10-19T12:01:00Z</time></trkpt>
+      <trkpt lat="19.43275" lon="-99.13265"><ele>2240</ele><time>2026-10-19T12:01:05Z</time></trkpt>
+      <trkpt lat="19.43260" lon="-99.13320"><ele>2240</ele><time>2026-10-19T12:01:10Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -1,0 +1,20 @@
+{
+  "name": "sos-wear-local-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend local para pruebas de la app SOS Wear",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "4.21.2"
+  },
+  "devDependencies": {
+    "supertest": "7.1.1"
+  }
+}
