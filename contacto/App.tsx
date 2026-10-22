@@ -432,11 +432,11 @@ function AppContent() {
         </Pressable>
         {active ? (
           <View style={styles.actions}>
-            <ActionButton label="Llamar" icon="☎" onPress={() => void callContact()} />
-            <ActionButton label="Cómo llegar" icon="↗" onPress={() => void openDirections(emergency)} />
+            <ActionButton label="Llamar" icon="call-outline" onPress={() => void callContact()} />
+            <ActionButton label="Cómo llegar" icon="navigate-outline" onPress={() => void openDirections(emergency)} />
             <ActionButton
               label={hasAcknowledged ? "En camino" : ackingId === emergency.id ? "Enviando…" : "Voy en camino"}
-              icon="✓"
+              icon="checkmark-circle-outline"
               primary
               disabled={hasAcknowledged || ackingId === emergency.id}
               onPress={() => void acknowledge(emergency)}

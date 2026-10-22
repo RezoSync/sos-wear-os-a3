@@ -23,8 +23,7 @@
         }
       ],
       "expo-notifications",
-      "expo-status-bar",
-      "expo-splash-screen"
+      "expo-status-bar"
     ],
     "android": {
       "adaptiveIcon": {

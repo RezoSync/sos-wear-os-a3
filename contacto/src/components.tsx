@@ -1,4 +1,6 @@
 import { useEffect, useRef, type PropsWithChildren } from "react";
+import type { ComponentProps } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "./theme";
 
@@ -59,7 +61,7 @@ export function ActionButton({
   onPress,
 }: {
   label: string;
-  icon: string;
+  icon: ComponentProps<typeof Ionicons>["name"];
   primary?: boolean;
   disabled?: boolean;
   onPress: () => void;
@@ -76,7 +78,7 @@ export function ActionButton({
         pressed && !disabled && styles.pressed,
       ]}
     >
-      <Text style={styles.icon}>{icon}</Text>
+      <Ionicons name={icon} size={17} color={theme.colors.white} />
       <Text style={styles.actionText}>{label}</Text>
     </Pressable>
   );
@@ -119,6 +121,5 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: theme.colors.surfaceRaised, borderWidth: 1, borderColor: theme.colors.border },
   disabled: { opacity: 0.58 },
   pressed: { opacity: 0.82 },
-  icon: { color: theme.colors.white, fontSize: 16, fontWeight: "800" },
   actionText: { color: theme.colors.white, fontSize: theme.typography.caption, fontWeight: "800" },
 });
