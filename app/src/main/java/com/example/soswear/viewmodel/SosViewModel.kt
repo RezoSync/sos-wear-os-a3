@@ -37,12 +37,6 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsFeedback = MutableStateFlow<String?>(null)
     private var countdownJob: Job? = null
 
-    init {
-        viewModelScope.launch {
-            SosSessionStore.detections.collect(::beginCountdown)
-        }
-    }
-
     val uiState: StateFlow<SosAppState> = combine(
         SosSessionStore.state,
         settingsRepository.settings,
@@ -184,6 +178,11 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 settingsRepository.save(userName, backendUrl)
+                val saved = uiState.value.settings.copy(
+                    userName = userName.trim(),
+                    backendUrl = backendUrl.trim().trimEnd('/'),
+                )
+                configureDetectionService(saved)
                 settingsFeedback.value = "Configuración guardada."
             } catch (error: IllegalArgumentException) {
                 settingsFeedback.value = error.message ?: "Revisa los valores de configuración."
@@ -198,18 +197,7 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 settingsRepository.saveDetectionSettings(settings)
-                val context = getApplication<Application>()
-                if (settings.detectVoice || settings.detectPulse || settings.detectRunning) {
-                    val intent = Intent(context, DetectionService::class.java).apply {
-                        action = DetectionService.ACTION_CONFIGURE
-                        putExtra(DetectionService.EXTRA_VOICE, settings.detectVoice)
-                        putExtra(DetectionService.EXTRA_PULSE, settings.detectPulse)
-                        putExtra(DetectionService.EXTRA_RUNNING, settings.detectRunning)
-                    }
-                    ContextCompat.startForegroundService(context, intent)
-                } else {
-                    context.stopService(Intent(context, DetectionService::class.java))
-                }
+                configureDetectionService(settings)
                 settingsFeedback.value = "Detección automática actualizada."
             } catch (error: SecurityException) {
                 settingsFeedback.value = error.localizedMessage
@@ -227,6 +215,23 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reportDetectionPermissionFailure() {
         settingsFeedback.value = "Concede los permisos necesarios para activar estas detecciones."
+    }
+
+    private fun configureDetectionService(settings: SosSettings) {
+        val context = getApplication<Application>()
+        if (settings.detectVoice || settings.detectPulse || settings.detectRunning) {
+            val intent = Intent(context, DetectionService::class.java).apply {
+                action = DetectionService.ACTION_CONFIGURE
+                putExtra(DetectionService.EXTRA_VOICE, settings.detectVoice)
+                putExtra(DetectionService.EXTRA_PULSE, settings.detectPulse)
+                putExtra(DetectionService.EXTRA_RUNNING, settings.detectRunning)
+                putExtra(DetectionService.EXTRA_USER_NAME, settings.userName)
+                putExtra(DetectionService.EXTRA_BACKEND_URL, settings.backendUrl)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        } else {
+            context.stopService(Intent(context, DetectionService::class.java))
+        }
     }
 
     private fun String.detectionReason(): String? = when (this) {

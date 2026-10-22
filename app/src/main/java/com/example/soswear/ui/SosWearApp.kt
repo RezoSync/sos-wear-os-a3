@@ -60,7 +60,9 @@ fun SosWearApp(sosViewModel: SosViewModel = viewModel()) {
                     PackageManager.PERMISSION_GRANTED) &&
                 (!requested.detectRunning || results[Manifest.permission.ACTIVITY_RECOGNITION] == true ||
                     ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
-                    PackageManager.PERMISSION_GRANTED)
+                    PackageManager.PERMISSION_GRANTED) &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
         if (permissionsGranted) sosViewModel.saveDetectionSettings(requested)
         else sosViewModel.reportDetectionPermissionFailure()
     }
@@ -149,6 +151,11 @@ fun SosWearApp(sosViewModel: SosViewModel = viewModel()) {
                                     if (settings.detectPulse) add(Manifest.permission.BODY_SENSORS)
                                     if (settings.detectRunning) {
                                         add(Manifest.permission.ACTIVITY_RECOGNITION)
+                                    }
+                                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                    if (Build.VERSION.SDK_INT >= 33) {
+                                        add(Manifest.permission.POST_NOTIFICATIONS)
                                     }
                                 }
                                 detectionPermissionLauncher.launch(permissions.toTypedArray())

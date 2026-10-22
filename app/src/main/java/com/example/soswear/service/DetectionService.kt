@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.LocationManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -23,6 +24,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.soswear.R
 import com.example.soswear.data.SosSessionStore
+import java.util.UUID
 import java.text.Normalizer
 import java.util.ArrayDeque
 import java.util.Locale
@@ -39,6 +41,11 @@ class DetectionService : Service(), SensorEventListener {
     private var noPulseSensor = false
     private var abnormalPulseSince: Long? = null
     private var runningSince: Long? = null
+    private var countdownTrigger: String? = null
+    private var countdownSeconds = 0
+    private var userName = "Usuario"
+    private var backendUrl = "http://10.0.2.2:3000"
+    private var countdownTask: Runnable? = null
     private val cancelledAt = mutableMapOf<String, Long>()
 
     override fun onCreate() {
@@ -51,14 +58,32 @@ class DetectionService : Service(), SensorEventListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CANCEL_TRIGGER -> {
-                intent.getStringExtra(EXTRA_TRIGGER)?.let { cancelledAt[it] = System.currentTimeMillis() }
+                val trigger = intent.getStringExtra(EXTRA_TRIGGER)
+                if (trigger != null) cancelledAt[trigger] = System.currentTimeMillis()
+                countdownTask?.let(handler::removeCallbacks)
+                countdownTask = null
+                countdownTrigger = null
+                if (SosSessionStore.state.value.isCountingDown) {
+                    SosSessionStore.update {
+                        it.copy(
+                            isCountingDown = false,
+                            countdownSeconds = 5,
+                            trigger = "manual",
+                            message = null,
+                        )
+                    }
+                }
                 return START_NOT_STICKY
             }
-            ACTION_CONFIGURE -> configure(
-                intent.getBooleanExtra(EXTRA_VOICE, false),
-                intent.getBooleanExtra(EXTRA_PULSE, false),
-                intent.getBooleanExtra(EXTRA_RUNNING, false),
-            )
+            ACTION_CONFIGURE -> {
+                userName = intent.getStringExtra(EXTRA_USER_NAME) ?: userName
+                backendUrl = intent.getStringExtra(EXTRA_BACKEND_URL) ?: backendUrl
+                configure(
+                    intent.getBooleanExtra(EXTRA_VOICE, false),
+                    intent.getBooleanExtra(EXTRA_PULSE, false),
+                    intent.getBooleanExtra(EXTRA_RUNNING, false),
+                )
+            }
             else -> stopSelf()
         }
         return START_STICKY
@@ -212,21 +237,124 @@ class DetectionService : Service(), SensorEventListener {
 
     private fun emitTrigger(trigger: String) {
         val now = System.currentTimeMillis()
-        if (now - (cancelledAt[trigger] ?: 0L) < DEBOUNCE_MILLIS) return
+        val lastCancelled = cancelledAt[trigger]
+        if (lastCancelled != null && now - lastCancelled < DEBOUNCE_MILLIS) return
         val session = SosSessionStore.state.value
         if (session.isActive || session.isCountingDown || session.awaitingPermissions) return
-        SosSessionStore.detect(trigger)
+        countdownTrigger = trigger
+        countdownSeconds = 10
+        SosSessionStore.update {
+            it.copy(
+                isCountingDown = true,
+                countdownSeconds = countdownSeconds,
+                awaitingPermissions = false,
+                trigger = trigger,
+                message = "Detectado: ${trigger.reason()}",
+            )
+        }
         abnormalPulseSince = null
         runningSince = null
+        updateNotification()
+        countdownTask = object : Runnable {
+            override fun run() {
+                val activeTrigger = countdownTrigger ?: return
+                if (countdownSeconds > 1) {
+                    countdownSeconds--
+                    SosSessionStore.update { it.copy(countdownSeconds = countdownSeconds) }
+                    updateNotification()
+                    handler.postDelayed(this, 1_000)
+                } else {
+                    countdownTrigger = null
+                    countdownTask = null
+                    beginDetectedEmergency(activeTrigger)
+                }
+            }
+        }.also { handler.postDelayed(it, 1_000) }
     }
 
-    private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_sos_notification)
-        .setContentTitle("Detección SOS activa")
-        .setContentText("Voz y sensores supervisados")
-        .setOngoing(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-        .build()
+    private fun beginDetectedEmergency(trigger: String) {
+        val hasLocation = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val locationEnabled = getSystemService(LocationManager::class.java).isLocationEnabled
+        if (!hasLocation || !locationEnabled) {
+            SosSessionStore.update {
+                it.copy(
+                    isCountingDown = false,
+                    connectionStatus = if (hasLocation) "Ubicación apagada" else "Permiso requerido",
+                    message = if (hasLocation) "Activa la ubicación del reloj." else "Concede ubicación precisa.",
+                )
+            }
+            updateNotification()
+            return
+        }
+        val id = UUID.randomUUID().toString()
+        SosSessionStore.update {
+            it.copy(
+                isActive = true,
+                isCountingDown = false,
+                awaitingPermissions = false,
+                emergencyId = id,
+                contactoEnCamino = null,
+                connectionStatus = "Iniciando SOS",
+            )
+        }
+        val intent = Intent(this, SosLocationService::class.java).apply {
+            action = SosLocationService.ACTION_START
+            putExtra(SosLocationService.EXTRA_EMERGENCY_ID, id)
+            putExtra(SosLocationService.EXTRA_USER_NAME, userName)
+            putExtra(SosLocationService.EXTRA_BACKEND_URL, backendUrl)
+            putExtra(SosLocationService.EXTRA_TRIGGER, trigger)
+        }
+        try {
+            ContextCompat.startForegroundService(this, intent)
+        } catch (error: SecurityException) {
+            Log.e(TAG, "No se pudo iniciar SOS después de la detección.", error)
+            SosSessionStore.update {
+                it.copy(isActive = false, connectionStatus = "No se pudo iniciar", message = error.localizedMessage)
+            }
+        } catch (error: IllegalStateException) {
+            Log.e(TAG, "Android bloqueó el inicio del SOS detectado.", error)
+            SosSessionStore.update {
+                it.copy(isActive = false, connectionStatus = "No se pudo iniciar", message = error.localizedMessage)
+            }
+        }
+        updateNotification()
+    }
+
+    private fun updateNotification() {
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
+    }
+
+    private fun buildNotification(): Notification {
+        val trigger = countdownTrigger
+        val text = if (trigger != null) {
+            "Detectado: ${trigger.reason()} · SOS en $countdownSeconds s"
+        } else {
+            "Voz y sensores supervisados"
+        }
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_sos_notification)
+            .setContentTitle(if (trigger == null) "Detección SOS activa" else "Cuenta regresiva SOS")
+            .setContentText(text)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+        if (trigger != null) {
+            val cancelIntent = Intent(this, DetectionService::class.java).apply {
+                action = ACTION_CANCEL_TRIGGER
+                putExtra(EXTRA_TRIGGER, trigger)
+            }
+            val cancelPendingIntent = android.app.PendingIntent.getService(
+                this,
+                NOTIFICATION_ID,
+                cancelIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancelar", cancelPendingIntent)
+        }
+        return builder.build()
+    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(CHANNEL_ID, "Detección automática", NotificationManager.IMPORTANCE_LOW)
@@ -246,12 +374,21 @@ class DetectionService : Service(), SensorEventListener {
         Normalizer.normalize(lowercase(Locale.ROOT), Normalizer.Form.NFD)
             .replace(Regex("\\p{Mn}+"), "")
 
+    private fun String.reason(): String = when (this) {
+        TRIGGER_VOICE -> "voz"
+        TRIGGER_PULSE -> "pulso anómalo"
+        TRIGGER_RUNNING -> "carrera"
+        else -> this
+    }
+
     companion object {
         const val ACTION_CONFIGURE = "com.example.soswear.DETECTION_CONFIGURE"
         const val ACTION_CANCEL_TRIGGER = "com.example.soswear.DETECTION_CANCEL"
         const val EXTRA_VOICE = "voice"
         const val EXTRA_PULSE = "pulse"
         const val EXTRA_RUNNING = "running"
+        const val EXTRA_USER_NAME = "user_name"
+        const val EXTRA_BACKEND_URL = "backend_url"
         const val EXTRA_TRIGGER = "trigger"
         const val TRIGGER_VOICE = "voz"
         const val TRIGGER_PULSE = "pulso"
