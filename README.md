@@ -1,143 +1,153 @@
 # SOS Wear
 
-Aplicación local de botón SOS para Wear OS con ubicación en tiempo real. El reloj envía las coordenadas al backend Express del PC; el dashboard las representa sobre OpenStreetMap.
+Prototipo educativo de asistencia SOS compuesto por un reloj Wear OS, un backend Node/Express v2 y una app Expo para el contacto. El reloj comunica una emergencia y su ubicación; el backend la distribuye en tiempo real al dashboard y al contacto, quien puede confirmar que va en camino.
+
+```mermaid
+flowchart LR
+  W[Reloj Wear OS<br/>Kotlin + Compose] -->|POST SOS, ubicación, ack| B[Backend v2<br/>Node / Express]
+  B -->|SSE| C[App del contacto<br/>Expo Go · iOS / Android]
+  B -->|SSE| D[Dashboard web<br/>Leaflet + OpenStreetMap]
+  C -->|POST ack: Voy en camino| B
+  B -->|respuesta de ubicación con acknowledgedBy| W
+```
+
+El backend conserva emergencias en memoria durante su ejecución: reiniciarlo elimina el estado. No se requiere base de datos.
 
 ## Requisitos
 
-- JDK 21 Temurin: `C:\Users\Vlad-pc\.jdks\temurin-21.0.12.1`
-- Android Studio y Android SDK configurados.
-- Un emulador **Wear OS Small Round, API 34** con conectividad Wi-Fi.
 - Node.js 20 o posterior y npm.
-- Conexión a Internet para cargar los mosaicos de OpenStreetMap en el dashboard.
+- App de contacto: Expo SDK 57 y Expo Go compatible; iPhone y PC en la misma red Wi-Fi (o un túnel de Expo).
+- Reloj: Android Studio, Android SDK, emulador **Wear OS Small Round API 34** y Temurin JDK 21 en `C:\Users\Vlad-pc\.jdks\temurin-21.0.12.1`.
+- Para compilar en este equipo: `ANDROID_HOME=C:\Users\Vlad-pc\AppData\Local\Android\Sdk`.
+- Conexión a Internet para descargar Leaflet y los mosaicos de OpenStreetMap.
 
-Gradle fija el JDK 21 del proyecto en `gradle.properties`. El backend y el dashboard se ejecutan localmente; las ubicaciones no se guardan en una base de datos y se borran al reiniciar el backend.
+## Cómo ejecutar cada pieza
 
-## Abrir y ejecutar la app
+### Backend y dashboard
 
-1. Abre la carpeta raíz del proyecto en Android Studio.
-2. Espera a que termine la sincronización de Gradle.
-3. Selecciona el emulador Wear OS Small Round API 34 y ejecuta la configuración `app`.
-4. Concede el permiso de ubicación precisa cuando la app lo solicite. Permite notificaciones para ver el aviso persistente del SOS.
-
-## Iniciar el backend y abrir el dashboard
-
-En PowerShell, desde la raíz del proyecto:
+Desde la raíz del repositorio, en PowerShell:
 
 ```powershell
-cd backend
-npm install
-npm start
+npm --prefix backend install
+npm --prefix backend start
 ```
 
-El servidor escucha en el puerto `3000` y anuncia `http://0.0.0.0:3000`. En el navegador del PC, abre:
+Abre [http://localhost:3000/dashboard](http://localhost:3000/dashboard) en el PC. El backend escucha en `0.0.0.0:3000`; el dashboard usa SSE y recurre a polling si pierde el flujo.
 
-```text
-http://localhost:3000/dashboard
-```
+### App del contacto con Expo Go
 
-Al iniciar el proceso, la lista de emergencias comienza vacía. El dashboard consulta el backend cada dos segundos; muestra el marcador activo, su ubicación y las emergencias finalizadas durante esa ejecución. Reiniciar el backend borra ambas listas.
+1. Instala las dependencias: `npm --prefix contacto install`.
+2. Inicia sesión en Expo desde la carpeta `contacto` con `npx expo login`.
+3. Configura en la app la URL del backend con la IP privada del PC, por ejemplo `http://192.168.1.42:3000`. En iPhone, `localhost` apuntaría al teléfono, no al PC.
+4. En la misma carpeta ejecuta `npx expo start --lan` y escanea el QR con Expo Go. Si la red impide conexiones LAN, usa `npx expo start --tunnel`.
+5. Permite las notificaciones locales si quieres recibir el aviso del sistema.
 
-La URL configurada por defecto en el reloj es `http://10.0.2.2:3000`, que apunta al PC desde el emulador Android. Para que el reloj pueda conectarse, deja el backend en ejecución y activa Wi-Fi en el emulador:
+Para obtener la IP del PC, ejecuta `ipconfig` y usa la dirección IPv4 del adaptador Wi-Fi. El iPhone y el PC deben estar en la misma red y no aislados por una red de invitados o VPN. Si Windows Firewall bloquea la conexión, permite Node.js en redes privadas o crea una regla de entrada limitada al puerto 3000 (PowerShell como administrador):
 
 ```powershell
-adb devices
-adb -s emulator-5554 shell svc wifi enable
+New-NetFirewallRule -DisplayName "SOS Wear Backend 3000" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
 ```
 
-Si ADB muestra otro serial, sustituye `emulator-5554` por el correspondiente. Puedes comprobar la conectividad con:
+El emulador Android usa `http://10.0.2.2:3000` para acceder al PC anfitrión; el teléfono físico debe usar la IP LAN del PC.
 
-```powershell
-adb -s emulator-5554 shell ip route
-```
+### Reloj Wear OS en el emulador
 
-La tabla debe mostrar una ruta de red. Sin Wi-Fi o ruta disponible, el reloj no podrá acceder a `10.0.2.2`.
+1. Abre la raíz del proyecto en Android Studio y espera la sincronización de Gradle.
+2. Inicia o crea un emulador **Wear OS Small Round API 34**.
+3. En PowerShell desde la raíz, configura las rutas obligatorias y compila:
 
-## Simular una ruta GPS
+   ```powershell
+   $env:JAVA_HOME = 'C:\Users\Vlad-pc\.jdks\temurin-21.0.12.1'
+   $env:ANDROID_HOME = 'C:\Users\Vlad-pc\AppData\Local\Android\Sdk'
+   $env:PATH = "$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:PATH"
+   .\gradlew.bat assembleDebug
+   ```
 
-1. Arranca el emulador Wear OS y abre **Extended Controls** (`…`) desde la ventana del emulador.
-2. Abre **Location**, importa el archivo [`test/ruta_prueba.gpx`](test/ruta_prueba.gpx) como ruta GPX y pulsa **Play** para reproducirla.
-3. Si Extended Controls ofrece una velocidad de reproducción, elige una que permita observar la actualización del mapa.
-4. Inicia SOS desde el reloj y comprueba que las coordenadas y el marcador cambian en el dashboard.
+4. Ejecuta la configuración `app` en el emulador y concede ubicación precisa y notificaciones. El SOS manual solicita la ubicación al terminar su cuenta regresiva.
+5. Para usar una ruta simulada, abre **Extended Controls > Location**, carga [`test/ruta_prueba.gpx`](test/ruta_prueba.gpx) y pulsa **Play**. Para fijar la ubicación de la UTSLRC desde ADB:
 
-La ruta de prueba recorre un tramo corto del centro de Ciudad de México.
+   ```powershell
+   adb emu geo fix -114.71727561714322 32.43786004187378
+   ```
 
-En la demo se fijó la ubicación en la UTSLRC (San Luis Río Colorado) con: adb emu geo fix -114.71727561714322 32.43786004187378
+En un emulador que requiera activar Wi-Fi, consulta su serial con `adb devices` y ejecuta `adb -s <serial> shell svc wifi enable`.
 
-## Ejemplo de POST `/api/sos`
+## Contrato API v2
 
-El backend acepta JSON con ID, nombre, latitud, longitud, marca temporal ISO 8601 y precisión opcional. Por ejemplo, desde PowerShell:
+Base local: `http://<IP-del-PC>:3000`. Los JSON de error conservan el formato `{ "error": "..." }`. El campo `trigger` se añadió de forma aditiva: se acepta en `POST /api/sos`, es opcional, y si se omite se interpreta como `manual`. Sus únicos valores son `manual`, `voz`, `pulso` y `carrera`; un valor distinto responde HTTP 400.
 
-```powershell
-$json = '{"id":"prueba-manual-01","name":"Usuario de prueba","lat":19.4326,"lng":-99.1332,"accuracy":8,"timestamp":"2026-10-19T12:00:00.000Z"}'
-Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/sos -ContentType 'application/json' -Body $json
-```
+| Método y ruta | Entrada principal | Resultado |
+|---|---|---|
+| `POST /api/sos` | `id?`, `name`, `lat`, `lng`, `timestamp`, `accuracy?`, `trigger?` | HTTP 201 y emergencia activa con `trigger`, `track` inicial, `acknowledgedBy: null` y demás datos. |
+| `POST /api/sos/:id/location` | `lat`, `lng`, `timestamp`, `accuracy?` | Actualiza coordenadas y rastro; devuelve la emergencia completa, incluido `trigger` y `acknowledgedBy` (`string` o `null`). |
+| `POST /api/sos/:id/ack` | `contactName` | Registra o actualiza `acknowledgedBy` y `acknowledgedAt`; devuelve la emergencia completa. |
+| `POST /api/sos/:id/cancel` | Sin campos obligatorios | Finaliza la emergencia y devuelve la emergencia completa. |
+| `GET /api/sos/active` | — | `{ emergencies, finalized }`; las activas y finalizadas mantienen `trigger`. |
+| `GET /api/sos/stream` | — | SSE: `snapshot`, `sos-created`, `sos-location`, `sos-ack`, `sos-finalized`; cada evento contiene la emergencia, incluido `trigger`. |
 
-La respuesta creada contiene `status: "active"`. El dashboard consume `GET /api/sos/active`, que devuelve los arreglos `emergencies` y `finalized`.
+Las coordenadas deben ser válidas, `timestamp` debe ser una fecha parseable y `accuracy` opcional no puede ser negativo. Cada emergencia mantiene hasta 300 puntos `{ lat, lng, accuracy, timestamp }`. `acknowledgedBy` y `acknowledgedAt` pueden ser nulos.
 
-## API v2 (A3)
+Para simular SOS/rastro desde PowerShell: `.\scripts\simular-sos.ps1`. Acepta `-Url`, `-Nombre`, `-Puntos`, `-Intervalo` y `-Trigger` (`manual` por defecto; permite `manual`, `voz`, `pulso` o `carrera`).
 
-La API v2 amplía el backend sin retirar ni cambiar las rutas existentes que utiliza el reloj. Cada emergencia ahora incluye `track`, un arreglo cronológico de puntos `{ lat, lng, accuracy, timestamp }` con un máximo de 300 elementos. Las respuestas de creación, ubicación, acuse y finalización incluyen la emergencia completa.
+## Detección automática del reloj
 
-### Acuse de recibo
+Las tres detecciones se guardan en DataStore y empiezan **apagadas**. Ninguna activa el SOS sin aviso: cada disparo entra a la cuenta regresiva de **10 segundos**, muestra el motivo y permite cancelar con vibración; el SOS manual conserva su cuenta de **5 segundos**. Al confirmar, el backend recibe el `trigger` correspondiente.
 
-El contacto puede indicar que va en camino mientras la emergencia está activa:
+| Detección | Regla implementada |
+|---|---|
+| Voz: auxilio | `SpeechRecognizer` escucha en español y reinicia después de cada resultado/error. Reconoce “auxilio”, “socorro” o “ayuda”, ignorando mayúsculas y acentos. Usa un servicio en primer plano con notificación mientras está habilitada. |
+| Pulso anómalo | En reposo (cadencia menor a 40 pasos/min), pulso mayor de 140 o menor de 40 bpm durante 20 s continuos. Requiere `TYPE_HEART_RATE`; no es diagnóstico médico. |
+| Carrera | Cadencia mayor de 150 pasos/min durante 20 s; además requiere pulso mayor de 120 bpm cuando hay sensor cardíaco disponible. El prototipo no integra sesiones externas de ejercicio. |
 
-```powershell
-$body = @{ contactName = 'Ana López' } | ConvertTo-Json
-Invoke-RestMethod -Method Post `
-  -Uri 'http://localhost:3000/api/sos/ID_DE_EMERGENCIA/ack' `
-  -ContentType 'application/json' -Body $body
-```
+Tras cancelar una detección, el mismo tipo queda en espera durante 2 minutos. En **Configuración > Detección automática** están los interruptores y los botones permanentes **Simular: auxilio**, **Simular: pulso anómalo** y **Simular: carrera**. Las simulaciones recorren la misma cuenta regresiva sin hablar ni correr. El texto de aviso se mantiene visible: **“Prototipo educativo. No es un dispositivo médico.”**
 
-La respuesta agrega `acknowledgedBy` y `acknowledgedAt` (fecha ISO 8601). Repetir la solicitud actualiza el nombre; un cuerpo sin `contactName` válido responde 400 y una emergencia inexistente o finalizada responde 404.
+La detección de voz requiere permiso de micrófono y un servicio de reconocimiento instalado; pulso y carrera dependen de los sensores del reloj/emulador y sus permisos. Si no hay reconocimiento o sensor compatible, la app lo indica. No se ha verificado voz ni sensores en el emulador de esta entrega: usa **MODO PRUEBA** para demostrar el flujo sin afirmar que esos sensores funcionan.
 
-### Eventos en tiempo real
+## Limitaciones
 
-`GET /api/sos/stream` mantiene una conexión Server-Sent Events. Primero entrega el evento `snapshot` con `{ emergencies, finalized }`; después puede entregar `sos-created`, `sos-location`, `sos-ack` y `sos-finalized`, cada uno con la emergencia completa en `data`. Desde PowerShell se puede observar el flujo con `curl.exe`:
-
-```powershell
-curl.exe -N http://localhost:3000/api/sos/stream
-```
-
-El endpoint anterior `GET /api/sos/active` sigue disponible para consultar el estado mediante polling.
-
-### Simular una emergencia
-
-Desde PowerShell en la raíz del proyecto, ejecuta el script sin instalar dependencias:
-
-```powershell
-.\scripts\simular-sos.ps1
-```
-
-Acepta `-Url` (por defecto `http://localhost:3000`), `-Nombre` (por defecto `Usuario simulado`), `-Puntos` (por defecto 20 ubicaciones) y `-Intervalo` (segundos entre ubicaciones, por defecto 3). Crea el SOS en la UTSLRC, envía las ubicaciones de la ruta y lo cancela al terminar. Si se interrumpe con Ctrl+C, intenta cancelar el SOS simulado.
-
-## Si no compila en otra máquina
-
-En Android Studio, abre **Settings > Build Tools > Gradle > Gradle JDK** y selecciona **JDK 21** (no JDK 25). Instala también el SDK de Android que requiera el proyecto desde el SDK Manager.
+- Expo Go puede suspender el JavaScript/SSE al pasar a segundo plano o al cerrar la app; no es una app nativa de producción con entrega garantizada en segundo plano.
+- El botón **Llamar** abre el marcador del teléfono con `tel:`; no hay servicio externo ni llamada automática. **Cómo llegar** abre una URL de mapas.
+- Voz y sensores dependen del hardware, permisos y servicios disponibles; el modo prueba valida la cuenta regresiva, no el reconocimiento ni la medición.
+- Una interrupción de red puede retrasar la sincronización; el reloj conserva operaciones pendientes mientras el servicio SOS sigue ejecutándose.
+- El backend guarda todo en memoria y no autentica usuarios. Úsalo solo en una red de prueba confiable; no expongas el puerto a Internet.
+- El mapa requiere Internet y OpenStreetMap/Leaflet disponibles.
 
 ## Checklist de pruebas
 
-- [ ] **Permiso denegado:** deniega ubicación precisa e inicia SOS. La app debe explicar que necesita el permiso y no empezar el rastreo.
-- [ ] **Cancelar cuenta regresiva:** pulsa SOS y luego **CANCELAR** antes de que transcurran cinco segundos. No debe aparecer una emergencia en el dashboard.
-- [x] **SOS completo:** activa Wi-Fi, inicia el backend, reproduce la ruta GPX y confirma que el dashboard muestra el dispositivo y actualiza sus coordenadas.
-- [ ] **Backend apagado y reconectado:** inicia SOS con el backend detenido. La app debe indicar el error de conexión y reintentar; arranca el backend y comprueba que se sincronizan las ubicaciones.
-- [x] **Detener SOS:** pulsa **Detener SOS** en el reloj. El dashboard debe conservar el registro, mostrar **Finalizada** y retirar el dispositivo de los activos.
-- [x] **Ubicación en el mapa:** comprueba que el marcador se desplaza suavemente y el mapa enfoca/ajusta el zoom al dispositivo activo.
-- [ ] **Backend reiniciado:** detén y vuelve a arrancar Node.js. El dashboard debe comenzar vacío y sin emergencias de ejecuciones anteriores.
+- [ ] Inicio SOS manual: 5 s, cancelar no crea emergencia y confirmar envía `trigger: manual`.
+- [ ] Simular auxilio, pulso anómalo y carrera: cada botón muestra su motivo, cuenta 10 s y permite cancelar.
+- [ ] Activar y desactivar cada detección, reiniciar la app y confirmar persistencia; verificar permisos y notificación visible.
+- [ ] Con `-Trigger carrera`, verificar que el backend, SSE, contacto y dashboard muestran el motivo correcto.
+- [ ] El contacto recibe el SOS y la notificación local muestra el motivo.
+- [ ] **Voy en camino** actualiza la app/dashboard y el reloj muestra el nombre; comprobar una sola respuesta háptica por emergencia.
+- [ ] Detener el SOS en el reloj: aparece como finalizado en el contacto y dashboard.
+- [ ] Con backend desconectado, observar reintento del reloj y reconexión del dashboard.
+- [ ] Probar diseño en Wear OS Small Round y en el iPhone, incluyendo safe areas y estados vacíos.
+- [ ] Probar voz y sensores en hardware compatible; registrar si el reconocimiento/sensor no está disponible.
 
-## Pruebas y compilación
+## Guion breve para grabar la demostración (10 pasos)
 
-Desde la raíz del proyecto, en PowerShell:
+1. Presenta el reloj, el iPhone y el dashboard abiertos; muestra que no hay alertas.
+2. Explica que el backend local conecta las tres superficies.
+3. En el reloj abre **Configuración > Detección automática** y señala que todo está apagado.
+4. Pulsa **Simular: auxilio** y muestra el motivo y la cuenta regresiva de 10 segundos.
+5. Cancela una simulación para demostrar que no se envía un SOS antes de confirmar.
+6. Repite la simulación y deja terminar la cuenta; muestra el SOS en reloj, app y dashboard.
+7. Enseña el marcador, el rastro y el motivo de la emergencia en el dashboard.
+8. En el iPhone pulsa **Voy en camino** y muestra el acuse en la app y el dashboard.
+9. Vuelve al reloj, enseña “va en camino” y pulsa **Detener SOS**.
+10. Muestra el estado final y recuerda que es un prototipo educativo no médico; voz/sensores no se presentan como verificados.
 
-```powershell
-$env:JAVA_HOME = 'C:\Users\Vlad-pc\.jdks\temurin-21.0.12.1'
-$env:ANDROID_HOME = 'C:\Users\Vlad-pc\AppData\Local\Android\Sdk'
-$env:PATH = "$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:PATH"
-.\gradlew.bat assembleDebug
-```
-
-Para probar las rutas del backend:
+## Validación local
 
 ```powershell
 npm --prefix backend test
+$env:JAVA_HOME = 'C:\Users\Vlad-pc\.jdks\temurin-21.0.12.1'
+$env:ANDROID_HOME = 'C:\Users\Vlad-pc\AppData\Local\Android\Sdk'
+.\gradlew.bat assembleDebug
+Push-Location contacto
+npx tsc --noEmit
+npx expo-doctor
+npx expo export --platform ios --platform android
+Pop-Location
 ```
