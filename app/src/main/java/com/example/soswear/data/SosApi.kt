@@ -31,8 +31,8 @@ class SosApi {
         )
     }
 
-    fun updateLocation(baseUrl: String, id: String, location: SosLocation) {
-        post(
+    fun updateLocation(baseUrl: String, id: String, location: SosLocation): String? {
+        val response = post(
             endpoint(baseUrl, "/api/sos/$id/location"),
             JSONObject()
                 .put("lat", location.latitude)
@@ -40,13 +40,14 @@ class SosApi {
                 .put("accuracy", location.accuracyMeters)
                 .put("timestamp", Instant.ofEpochMilli(location.timeMillis).toString()),
         )
+        return response.opt("acknowledgedBy") as? String
     }
 
     fun cancelEmergency(baseUrl: String, id: String) {
         post(endpoint(baseUrl, "/api/sos/$id/cancel"), JSONObject())
     }
 
-    private fun post(url: String, payload: JSONObject) {
+    private fun post(url: String, payload: JSONObject): JSONObject {
         Log.d(TAG, "POST $url")
         try {
             val request = Request.Builder()
@@ -63,6 +64,7 @@ class SosApi {
                     throw IOException("HTTP ${response.code}: $message")
                 }
                 Log.d(TAG, "POST $url -> HTTP ${response.code}")
+                return JSONObject(responseBody)
             }
         } catch (error: IOException) {
             Log.e(

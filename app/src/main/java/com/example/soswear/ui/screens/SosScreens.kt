@@ -162,6 +162,18 @@ fun ActiveSosScreen(
         item {
             Text("SOS ACTIVO", color = SosRed, fontWeight = FontWeight.Bold)
         }
+        session.contactoEnCamino?.let { name ->
+            item {
+                Text(
+                    "✓ $name va en camino",
+                    color = Color(0xFF43D17A),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
+            }
+        }
         item {
             Text(session.connectionStatus, fontSize = 12.sp, textAlign = TextAlign.Center)
         }

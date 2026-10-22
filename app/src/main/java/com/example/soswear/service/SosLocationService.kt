@@ -10,6 +10,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -88,7 +91,13 @@ class SosLocationService : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification("SOS activo · obteniendo ubicación"))
         SosSessionStore.update {
-            it.copy(isActive = true, connectionStatus = "Obteniendo ubicación", message = null)
+            it.copy(
+                isActive = true,
+                emergencyId = emergencyId,
+                contactoEnCamino = null,
+                connectionStatus = "Obteniendo ubicación",
+                message = null,
+            )
         }
         locationRepository.start(
             onLocation = ::onLocation,
@@ -147,7 +156,12 @@ class SosLocationService : Service() {
         pendingOperations.removeAll { it is PendingOperation.Location }
         if (!serverStarted && !startInProgress && pendingOperations.isEmpty()) {
             SosSessionStore.update {
-                it.copy(isActive = false, connectionStatus = "SOS detenido", message = null)
+                it.copy(
+                    isActive = false,
+                    contactoEnCamino = null,
+                    connectionStatus = "SOS detenido",
+                    message = null,
+                )
             }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -157,6 +171,7 @@ class SosLocationService : Service() {
         SosSessionStore.update {
             it.copy(
                 isActive = false,
+                contactoEnCamino = null,
                 connectionStatus = "Sincronizando cancelación",
                 message = "El SOS se detuvo; se enviará la cancelación cuando vuelva el backend.",
             )
@@ -177,12 +192,18 @@ class SosLocationService : Service() {
 
             if (operation is PendingOperation.Start) startInProgress = true
             try {
-                withContext(Dispatchers.IO) {
+                val acknowledgedBy = withContext(Dispatchers.IO) {
                     val id = checkNotNull(emergencyId)
                     when (operation) {
-                        is PendingOperation.Start -> api.startEmergency(backendUrl, id, userName, operation.location)
+                        is PendingOperation.Start -> {
+                            api.startEmergency(backendUrl, id, userName, operation.location)
+                            null
+                        }
                         is PendingOperation.Location -> api.updateLocation(backendUrl, id, operation.location)
-                        PendingOperation.Cancel -> api.cancelEmergency(backendUrl, id)
+                        PendingOperation.Cancel -> {
+                            api.cancelEmergency(backendUrl, id)
+                            null
+                        }
                     }
                 }
                 when (operation) {
@@ -197,12 +218,17 @@ class SosLocationService : Service() {
                             )
                         }
                     }
-                    is PendingOperation.Location -> SosSessionStore.update {
-                        it.copy(
-                            lastSentAt = operation.location.timeMillis,
-                            connectionStatus = "Conectado",
-                            lastError = null,
-                        )
+                    is PendingOperation.Location -> {
+                        val previousContact = SosSessionStore.state.value.contactoEnCamino
+                        SosSessionStore.update {
+                            it.copy(
+                                lastSentAt = operation.location.timeMillis,
+                                connectionStatus = "Conectado",
+                                lastError = null,
+                                contactoEnCamino = acknowledgedBy,
+                            )
+                        }
+                        if (previousContact == null && acknowledgedBy != null) vibrateForAcknowledgement()
                     }
                     PendingOperation.Cancel -> {
                         SosSessionStore.update {
@@ -283,6 +309,24 @@ class SosLocationService : Service() {
         }
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text))
+    }
+
+    private fun vibrateForAcknowledgement() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(VibratorManager::class.java).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Vibrator::class.java)
+        }
+        if (vibrator.hasVibrator()) {
+            vibrator.vibrate(
+                VibrationEffect.createWaveform(
+                    longArrayOf(0, 65, 90, 65),
+                    intArrayOf(0, 160, 0, 160),
+                    -1,
+                ),
+            )
+        }
     }
 
     private fun buildNotification(text: String): Notification {

@@ -10,6 +10,7 @@ data class SosUiState(
     val countdownSeconds: Int = 5,
     val awaitingPermissions: Boolean = false,
     val emergencyId: String? = null,
+    val contactoEnCamino: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
     val accuracyMeters: Float? = null,
