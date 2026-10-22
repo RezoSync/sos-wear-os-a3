@@ -61,6 +61,7 @@ function AppContent() {
   const [notificationsReady, setNotificationsReady] = useState(false);
   const [screen, setScreen] = useState<Screen>("principal");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapFocusRequest, setMapFocusRequest] = useState(0);
   const [newAlert, setNewAlert] = useState<Emergency | null>(null);
   const [permissionWarning, setPermissionWarning] = useState<string | null>(null);
   const [acknowledgedIds, setAcknowledgedIds] = useState<string[]>([]);
@@ -181,6 +182,11 @@ function AppContent() {
     setScreen("configuracion");
   };
 
+  const focusEmergency = (id: string) => {
+    setSelectedId(id);
+    setMapFocusRequest((current) => current + 1);
+  };
+
   const testConnection = async () => {
     setTestingConnection(true);
     setConnectionTest(null);
@@ -230,7 +236,7 @@ function AppContent() {
         accessibilityRole="button"
         style={styles.alertViewButton}
         onPress={() => {
-          setSelectedId(newAlert.id);
+          focusEmergency(newAlert.id);
           setScreen("principal");
           setNewAlert(null);
         }}
@@ -329,7 +335,11 @@ function AppContent() {
       {ackError ? <Text style={styles.errorText}>{ackError}</Text> : null}
 
       <Text style={styles.sectionHeading}>Ubicación en tiempo real</Text>
-      <EmergencyMap emergencies={feed.activas} selectedId={selectedId} />
+      <EmergencyMap
+        emergencies={feed.activas}
+        selectedId={selectedId}
+        focusRequest={mapFocusRequest}
+      />
       {feed.activas.length === 0 ? (
         <Text style={styles.emptyText}>Sin alertas activas</Text>
       ) : null}
@@ -355,7 +365,7 @@ function AppContent() {
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            if (active) setSelectedId(emergency.id);
+            if (active) focusEmergency(emergency.id);
           }}
         >
           <View style={styles.cardHeader}>
