@@ -11,6 +11,12 @@ const emergenciesList = document.getElementById("emergencies");
 const emptyState = document.getElementById("empty-state");
 const connection = document.getElementById("connection");
 const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 5 });
+const triggerNames = {
+  manual: "Manual",
+  voz: "Voz",
+  pulso: "Pulso anómalo",
+  carrera: "Carrera",
+};
 let focusSignature = null;
 let lastFocus = null;
 let currentEmergencies = [];
@@ -21,25 +27,44 @@ let retryTimer = null;
 
 function updateList(emergencies, finalized) {
   emergenciesList.replaceChildren();
-  emptyState.hidden = emergencies.length + finalized.length > 0;
+  emptyState.hidden = emergencies.length > 0;
 
   for (const emergency of [...emergencies, ...finalized]) {
     const item = document.createElement("li");
     item.className = `emergency-card${emergency.status === "finalized" ? " finalized" : ""}`;
+    const top = document.createElement("div");
+    top.className = "card-top";
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = emergency.name.trim().charAt(0).toLocaleUpperCase("es-MX");
+    const heading = document.createElement("div");
+    heading.className = "card-heading";
     const name = document.createElement("strong");
+    name.className = "person-name";
     name.textContent = emergency.name;
+    const chips = document.createElement("div");
+    chips.className = "chips";
     const status = document.createElement("span");
-    status.className = "emergency-status";
-    status.textContent = emergency.status === "finalized" ? "Finalizada" : "SOS activo";
+    status.className = `chip emergency-status${emergency.status === "finalized" ? " finished" : ""}`;
+    status.textContent = emergency.status === "finalized" ? "Finalizada" : "SOS ACTIVO";
+    const trigger = document.createElement("span");
+    trigger.className = "chip trigger-chip";
+    trigger.textContent = triggerNames[emergency.trigger] ?? "Manual";
+    chips.append(status, trigger);
+    heading.append(name, chips);
+    top.append(avatar, heading);
     const position = document.createElement("span");
+    position.className = "coordinates";
     position.textContent = `${numberFormat.format(emergency.lat)}, ${numberFormat.format(emergency.lng)}`;
     const updated = document.createElement("span");
+    updated.className = "updated";
     const locationTime = emergency.lastLocationAt ?? emergency.timestamp;
-    updated.textContent = `Última ubicación: ${new Date(locationTime).toLocaleTimeString("es-MX")}`;
-    item.append(name, status, position, updated);
+    updated.textContent = `Última ubicación · ${relativeTime(locationTime)}`;
+    item.append(top, position, updated);
     if (emergency.acknowledgedBy) {
       const acknowledged = document.createElement("span");
-      acknowledged.textContent = `Contacto en camino: ${emergency.acknowledgedBy}`;
+      acknowledged.className = "acknowledged";
+      acknowledged.textContent = `✓ ${emergency.acknowledgedBy} va en camino`;
       item.append(acknowledged);
     }
     emergenciesList.append(item);
@@ -91,8 +116,18 @@ function renderDashboard() {
     const marker = markers.get(emergency.id);
     const finalizedStatus = emergency.status === "finalized";
     const status = finalizedStatus ? "Finalizada" : "SOS activo";
-    const popup = `<strong>${escapeHtml(emergency.name)}</strong><br>${escapeHtml(status)}<br>${numberFormat.format(emergency.lat)}, ${numberFormat.format(emergency.lng)}`;
+    const trigger = triggerNames[emergency.trigger] ?? "Manual";
+    const acknowledged = emergency.acknowledgedBy
+      ? `<br><span style="color:#48d597">✓ ${escapeHtml(emergency.acknowledgedBy)} va en camino</span>`
+      : "";
+    const popup = `<strong>${escapeHtml(emergency.name)}</strong><br>${escapeHtml(status)} · ${escapeHtml(trigger)}${acknowledged}<br>${numberFormat.format(emergency.lat)}, ${numberFormat.format(emergency.lng)}`;
     if (marker) {
+      marker.setIcon(L.divIcon({
+        className: `sos-marker${finalizedStatus ? " finalized-marker" : ""}`,
+        html: '<span class="marker-pulse"></span><span class="marker-core"></span>',
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+      }));
       if (finalizedStatus) {
         const animation = markerAnimations.get(emergency.id);
         if (animation !== undefined) window.cancelAnimationFrame(animation);
@@ -105,7 +140,15 @@ function renderDashboard() {
     } else {
       markers.set(
         emergency.id,
-        L.marker(position, { opacity: finalizedStatus ? 0.65 : 1 }).addTo(map).bindPopup(popup),
+        L.marker(position, {
+          opacity: finalizedStatus ? 0.65 : 1,
+          icon: L.divIcon({
+            className: `sos-marker${finalizedStatus ? " finalized-marker" : ""}`,
+            html: '<span class="marker-pulse"></span><span class="marker-core"></span>',
+            iconSize: [38, 38],
+            iconAnchor: [19, 19],
+          }),
+        }).addTo(map).bindPopup(popup),
       );
     }
 
@@ -117,7 +160,7 @@ function renderDashboard() {
       } else {
         tracks.set(
           emergency.id,
-          L.polyline(coordinates, { color: "red", weight: 4 }).addTo(map),
+          L.polyline(coordinates, { color: "#ff4458", weight: 5, opacity: 0.88 }).addTo(map),
         );
       }
     }
@@ -165,14 +208,24 @@ function replaceEmergency(emergency) {
 
 function setConnectionStatus(text, online) {
   connection.textContent = text;
-  connection.className = `connection ${online ? "online" : "offline"}`;
+  connection.className = `connection ${online ? "online" : "offline"}${
+    text.startsWith("Reconectando") ? " reconnecting" : ""
+  }`;
+}
+
+function relativeTime(value) {
+  const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
+  if (!Number.isFinite(elapsed)) return "hora no disponible";
+  if (elapsed < 60) return `hace ${elapsed} s`;
+  if (elapsed < 3600) return `hace ${Math.floor(elapsed / 60)} min`;
+  return `hace ${Math.floor(elapsed / 3600)} h`;
 }
 
 function startPolling() {
   if (pollingTimer === null) {
     pollingTimer = window.setInterval(loadEmergencies, 2000);
   }
-  setConnectionStatus("Reconectando (polling)", false);
+  setConnectionStatus("Reconectando", false);
   loadEmergencies();
 }
 
@@ -190,7 +243,7 @@ function connectSse() {
     currentEmergencies = state.emergencies;
     currentFinalized = state.finalized;
     renderDashboard();
-    setConnectionStatus("En vivo (SSE)", true);
+    setConnectionStatus("En vivo", true);
     if (pollingTimer !== null) {
       window.clearInterval(pollingTimer);
       pollingTimer = null;
@@ -201,7 +254,7 @@ function connectSse() {
     source.addEventListener(eventName, (event) => {
       if (eventSource !== source) return;
       replaceEmergency(JSON.parse(event.data));
-      setConnectionStatus("En vivo (SSE)", true);
+      setConnectionStatus("En vivo", true);
     });
   }
 

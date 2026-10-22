@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SOS Wear | Dashboard</title>
+    <title>SOS Wear | Centro de monitoreo</title>
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -15,15 +15,22 @@
   <body>
     <header>
       <div>
-        <p class="eyebrow">MONITOREO LOCAL</p>
-        <h1>Emergencias activas</h1>
+        <p class="eyebrow">SOS WEAR · CENTRO DE MONITOREO</p>
+        <h1>Vista general de emergencias</h1>
       </div>
-      <p id="connection" class="connection">Conectando…</p>
+      <p id="connection" class="connection" role="status" aria-live="polite">Conectando…</p>
     </header>
     <main>
       <section class="sidebar" aria-label="Emergencias">
-        <h2>Dispositivos</h2>
-        <p id="empty-state">Esperando una señal SOS…</p>
+        <div class="sidebar-heading">
+          <h2>Emergencias</h2>
+          <span class="live-label">ACTIVAS</span>
+        </div>
+        <p id="empty-state">
+          <span class="empty-symbol">✓</span>
+          <strong>Sin alertas activas</strong>
+          Esperando una señal SOS…
+        </p>
         <ul id="emergencies"></ul>
         <p class="footnote">Actualización en tiempo real con reconexión automática</p>
       </section>
