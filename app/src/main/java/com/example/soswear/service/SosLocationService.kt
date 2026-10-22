@@ -42,6 +42,7 @@ class SosLocationService : Service() {
     private lateinit var locationRepository: LocationRepository
     private var retryJob: Job? = null
     private var emergencyId: String? = null
+    private var emergencyTrigger: String = "manual"
     private var userName: String = "Usuario"
     private var backendUrl: String = "http://10.0.2.2:3000"
     private var latestLocation: SosLocation? = null
@@ -79,6 +80,7 @@ class SosLocationService : Service() {
 
         emergencyId = intent.getStringExtra(EXTRA_EMERGENCY_ID)
         userName = intent.getStringExtra(EXTRA_USER_NAME) ?: "Usuario"
+        emergencyTrigger = intent.getStringExtra(EXTRA_TRIGGER) ?: "manual"
         backendUrl = intent.getStringExtra(EXTRA_BACKEND_URL)?.trimEnd('/')
             ?: "http://10.0.2.2:3000"
         if (emergencyId.isNullOrBlank()) {
@@ -196,7 +198,13 @@ class SosLocationService : Service() {
                     val id = checkNotNull(emergencyId)
                     when (operation) {
                         is PendingOperation.Start -> {
-                            api.startEmergency(backendUrl, id, userName, operation.location)
+                            api.startEmergency(
+                                backendUrl,
+                                id,
+                                userName,
+                                operation.location,
+                                emergencyTrigger,
+                            )
                             null
                         }
                         is PendingOperation.Location -> api.updateLocation(backendUrl, id, operation.location)
@@ -381,6 +389,7 @@ class SosLocationService : Service() {
         const val EXTRA_EMERGENCY_ID = "emergency_id"
         const val EXTRA_USER_NAME = "user_name"
         const val EXTRA_BACKEND_URL = "backend_url"
+        const val EXTRA_TRIGGER = "trigger"
 
         private const val TAG = "SosLocationService"
         private const val CHANNEL_ID = "sos_emergency"

@@ -11,6 +11,7 @@ data class SosUiState(
     val awaitingPermissions: Boolean = false,
     val emergencyId: String? = null,
     val contactoEnCamino: String? = null,
+    val trigger: String = "manual",
     val latitude: Double? = null,
     val longitude: Double? = null,
     val accuracyMeters: Float? = null,
@@ -23,9 +24,15 @@ data class SosUiState(
 
 object SosSessionStore {
     private val mutableState = MutableStateFlow(SosUiState())
+    private val detectedTriggers = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 1)
     val state: StateFlow<SosUiState> = mutableState.asStateFlow()
+    val detections = detectedTriggers
 
     fun update(transform: (SosUiState) -> SosUiState) {
         mutableState.value = transform(mutableState.value)
+    }
+
+    fun detect(trigger: String) {
+        detectedTriggers.tryEmit(trigger)
     }
 }

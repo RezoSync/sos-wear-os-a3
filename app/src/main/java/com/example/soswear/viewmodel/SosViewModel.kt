@@ -14,6 +14,7 @@ import com.example.soswear.data.SosSettings
 import com.example.soswear.data.SosSettingsRepository
 import com.example.soswear.data.SosUiState
 import com.example.soswear.service.SosLocationService
+import com.example.soswear.service.DetectionService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,12 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsFeedback = MutableStateFlow<String?>(null)
     private var countdownJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            SosSessionStore.detections.collect(::beginCountdown)
+        }
+    }
+
     val uiState: StateFlow<SosAppState> = combine(
         SosSessionStore.state,
         settingsRepository.settings,
@@ -44,18 +51,20 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
         SosAppState(session, settings, feedback)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SosAppState())
 
-    fun beginCountdown() {
+    fun beginCountdown(trigger: String = "manual") {
         countdownJob?.cancel()
+        val secondsTotal = if (trigger == "manual") 5 else 10
         SosSessionStore.update {
             it.copy(
                 isCountingDown = true,
-                countdownSeconds = 5,
+                countdownSeconds = secondsTotal,
                 awaitingPermissions = false,
-                message = null,
+                trigger = trigger,
+                message = trigger.detectionReason()?.let { reason -> "Detectado: $reason" },
             )
         }
         countdownJob = viewModelScope.launch {
-            for (seconds in 5 downTo 1) {
+            for (seconds in secondsTotal downTo 1) {
                 SosSessionStore.update { it.copy(countdownSeconds = seconds) }
                 delay(1_000)
             }
@@ -68,13 +77,22 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelCountdown() {
         countdownJob?.cancel()
         countdownJob = null
+        val cancelledTrigger = SosSessionStore.state.value.trigger
         SosSessionStore.update {
             it.copy(
                 isCountingDown = false,
                 countdownSeconds = 5,
                 awaitingPermissions = false,
+                trigger = "manual",
                 message = null,
             )
+        }
+        cancelledTrigger.takeIf { it != "manual" }?.let { trigger ->
+            val intent = Intent(getApplication(), DetectionService::class.java).apply {
+                action = DetectionService.ACTION_CANCEL_TRIGGER
+                putExtra(DetectionService.EXTRA_TRIGGER, trigger)
+            }
+            getApplication<Application>().startService(intent)
         }
     }
 
@@ -109,6 +127,7 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
             putExtra(SosLocationService.EXTRA_EMERGENCY_ID, UUID.randomUUID().toString())
             putExtra(SosLocationService.EXTRA_USER_NAME, currentSettings.userName)
             putExtra(SosLocationService.EXTRA_BACKEND_URL, currentSettings.backendUrl)
+            putExtra(SosLocationService.EXTRA_TRIGGER, SosSessionStore.state.value.trigger)
         }
         try {
             ContextCompat.startForegroundService(getApplication(), intent)
@@ -172,5 +191,48 @@ class SosViewModel(application: Application) : AndroidViewModel(application) {
                 settingsFeedback.value = "No se pudo guardar la configuración: ${error.localizedMessage}"
             }
         }
+    }
+
+    fun saveDetectionSettings(settings: SosSettings) {
+        settingsFeedback.value = null
+        viewModelScope.launch {
+            try {
+                settingsRepository.saveDetectionSettings(settings)
+                val context = getApplication<Application>()
+                if (settings.detectVoice || settings.detectPulse || settings.detectRunning) {
+                    val intent = Intent(context, DetectionService::class.java).apply {
+                        action = DetectionService.ACTION_CONFIGURE
+                        putExtra(DetectionService.EXTRA_VOICE, settings.detectVoice)
+                        putExtra(DetectionService.EXTRA_PULSE, settings.detectPulse)
+                        putExtra(DetectionService.EXTRA_RUNNING, settings.detectRunning)
+                    }
+                    ContextCompat.startForegroundService(context, intent)
+                } else {
+                    context.stopService(Intent(context, DetectionService::class.java))
+                }
+                settingsFeedback.value = "Detección automática actualizada."
+            } catch (error: SecurityException) {
+                settingsFeedback.value = error.localizedMessage
+                    ?: "Android no concedió los permisos de detección."
+            } catch (error: IllegalStateException) {
+                settingsFeedback.value = error.localizedMessage
+                    ?: "No se pudo iniciar el servicio de detección."
+            } catch (error: IOException) {
+                settingsFeedback.value = "No se pudo guardar la configuración: ${error.localizedMessage}"
+            }
+        }
+    }
+
+    fun simulateDetection(trigger: String) = beginCountdown(trigger)
+
+    fun reportDetectionPermissionFailure() {
+        settingsFeedback.value = "Concede los permisos necesarios para activar estas detecciones."
+    }
+
+    private fun String.detectionReason(): String? = when (this) {
+        "voz" -> "voz"
+        "pulso" -> "pulso anómalo"
+        "carrera" -> "carrera"
+        else -> null
     }
 }

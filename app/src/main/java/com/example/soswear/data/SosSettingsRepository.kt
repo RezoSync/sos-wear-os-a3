@@ -3,6 +3,7 @@ package com.example.soswear.data
 import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,9 @@ private val Context.settingsDataStore by preferencesDataStore(name = "sos_settin
 data class SosSettings(
     val userName: String = "Usuario",
     val backendUrl: String = "http://10.0.2.2:3000",
+    val detectVoice: Boolean = false,
+    val detectPulse: Boolean = false,
+    val detectRunning: Boolean = false,
 )
 
 class SosSettingsRepository(context: Context) {
@@ -22,6 +26,9 @@ class SosSettingsRepository(context: Context) {
         SosSettings(
             userName = preferences[USER_NAME] ?: SosSettings().userName,
             backendUrl = preferences[BACKEND_URL] ?: SosSettings().backendUrl,
+            detectVoice = preferences[DETECT_VOICE] ?: false,
+            detectPulse = preferences[DETECT_PULSE] ?: false,
+            detectRunning = preferences[DETECT_RUNNING] ?: false,
         )
     }
 
@@ -45,8 +52,19 @@ class SosSettingsRepository(context: Context) {
         }
     }
 
+    suspend fun saveDetectionSettings(settings: SosSettings) {
+        dataStore.edit { preferences ->
+            preferences[DETECT_VOICE] = settings.detectVoice
+            preferences[DETECT_PULSE] = settings.detectPulse
+            preferences[DETECT_RUNNING] = settings.detectRunning
+        }
+    }
+
     private companion object {
         val USER_NAME = stringPreferencesKey("user_name")
         val BACKEND_URL = stringPreferencesKey("backend_url")
+        val DETECT_VOICE = booleanPreferencesKey("detect_voice")
+        val DETECT_PULSE = booleanPreferencesKey("detect_pulse")
+        val DETECT_RUNNING = booleanPreferencesKey("detect_running")
     }
 }

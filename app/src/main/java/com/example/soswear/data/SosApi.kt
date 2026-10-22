@@ -18,12 +18,13 @@ class SosApi {
         .writeTimeout(4, TimeUnit.SECONDS)
         .build()
 
-    fun startEmergency(baseUrl: String, id: String, name: String, location: SosLocation) {
+    fun startEmergency(baseUrl: String, id: String, name: String, location: SosLocation, trigger: String) {
         post(
             endpoint(baseUrl, "/api/sos"),
             JSONObject()
                 .put("id", id)
                 .put("name", name)
+                .put("trigger", trigger)
                 .put("lat", location.latitude)
                 .put("lng", location.longitude)
                 .put("accuracy", location.accuracyMeters)

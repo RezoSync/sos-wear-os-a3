@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -27,6 +30,7 @@ import com.example.soswear.ui.screens.ConfirmationScreen
 import com.example.soswear.ui.screens.HomeScreen
 import com.example.soswear.ui.screens.SettingsScreen
 import com.example.soswear.ui.theme.SosWearTheme
+import com.example.soswear.data.SosSettings
 import com.example.soswear.viewmodel.SosViewModel
 
 private object Routes {
@@ -41,6 +45,25 @@ fun SosWearApp(sosViewModel: SosViewModel = viewModel()) {
     val state by sosViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberSwipeDismissableNavController()
     val context = LocalContext.current
+    var pendingDetectionSettings by remember { mutableStateOf<SosSettings?>(null) }
+    val detectionPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        val requested = pendingDetectionSettings ?: return@rememberLauncherForActivityResult
+        pendingDetectionSettings = null
+        val permissionsGranted =
+            (!requested.detectVoice || results[Manifest.permission.RECORD_AUDIO] == true ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED) &&
+                (!requested.detectPulse || results[Manifest.permission.BODY_SENSORS] == true ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.BODY_SENSORS) ==
+                    PackageManager.PERMISSION_GRANTED) &&
+                (!requested.detectRunning || results[Manifest.permission.ACTIVITY_RECOGNITION] == true ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
+                    PackageManager.PERMISSION_GRANTED)
+        if (permissionsGranted) sosViewModel.saveDetectionSettings(requested)
+        else sosViewModel.reportDetectionPermissionFailure()
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
@@ -116,6 +139,22 @@ fun SosWearApp(sosViewModel: SosViewModel = viewModel()) {
                     SettingsScreen(
                         state = state,
                         onSave = sosViewModel::saveSettings,
+                        onDetectionSettings = { settings ->
+                            if (!settings.detectVoice && !settings.detectPulse && !settings.detectRunning) {
+                                sosViewModel.saveDetectionSettings(settings)
+                            } else {
+                                pendingDetectionSettings = settings
+                                val permissions = buildList {
+                                    if (settings.detectVoice) add(Manifest.permission.RECORD_AUDIO)
+                                    if (settings.detectPulse) add(Manifest.permission.BODY_SENSORS)
+                                    if (settings.detectRunning) {
+                                        add(Manifest.permission.ACTIVITY_RECOGNITION)
+                                    }
+                                }
+                                detectionPermissionLauncher.launch(permissions.toTypedArray())
+                            }
+                        },
+                        onSimulate = sosViewModel::simulateDetection,
                         onBack = { navController.popBackStack() },
                     )
                 }

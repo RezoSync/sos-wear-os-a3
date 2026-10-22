@@ -37,6 +37,9 @@ import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.ToggleChip
+import androidx.wear.compose.material.Switch
+import com.example.soswear.data.SosSettings
 import com.example.soswear.data.SosUiState
 import com.example.soswear.viewmodel.SosAppState
 import java.util.Locale
@@ -232,6 +235,8 @@ fun ActiveSosScreen(
 fun SettingsScreen(
     state: SosAppState,
     onSave: (String, String) -> Unit,
+    onDetectionSettings: (SosSettings) -> Unit,
+    onSimulate: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     var userName by remember(state.settings.userName) { mutableStateOf(state.settings.userName) }
@@ -245,6 +250,74 @@ fun SettingsScreen(
     ) {
         item {
             Text("Configuración", fontWeight = FontWeight.Bold)
+        }
+        item {
+            Text("Detección automática", fontWeight = FontWeight.Bold)
+        }
+        item {
+            Text(
+                "Prototipo educativo. No es un dispositivo médico.",
+                color = Color(0xFFFFC857),
+                fontSize = 10.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+        item {
+            ToggleChip(
+                label = { Text("Voz: auxilio", maxLines = 1) },
+                checked = state.settings.detectVoice,
+                onCheckedChange = {
+                    onDetectionSettings(state.settings.copy(detectVoice = it))
+                },
+                toggleControl = { Switch(checked = state.settings.detectVoice) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            ToggleChip(
+                label = { Text("Pulso anómalo", maxLines = 1) },
+                checked = state.settings.detectPulse,
+                onCheckedChange = {
+                    onDetectionSettings(state.settings.copy(detectPulse = it))
+                },
+                toggleControl = { Switch(checked = state.settings.detectPulse) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            ToggleChip(
+                label = { Text("Carrera", maxLines = 1) },
+                checked = state.settings.detectRunning,
+                onCheckedChange = {
+                    onDetectionSettings(state.settings.copy(detectRunning = it))
+                },
+                toggleControl = { Switch(checked = state.settings.detectRunning) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            Chip(
+                label = { Text("Simular: auxilio", maxLines = 1) },
+                onClick = { onSimulate("voz") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            Chip(
+                label = { Text("Simular: pulso anómalo", maxLines = 1) },
+                onClick = { onSimulate("pulso") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            Chip(
+                label = { Text("Simular: carrera", maxLines = 1) },
+                onClick = { onSimulate("carrera") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        state.session.message?.let { message ->
+            item { Text(message, color = Color(0xFFFFC857), fontSize = 10.sp, textAlign = TextAlign.Center) }
         }
         item {
             Text("Nombre de usuario", fontSize = 11.sp)
