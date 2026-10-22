@@ -2,7 +2,9 @@ param(
     [string]$Url = "http://localhost:3000",
     [string]$Nombre = "Usuario simulado",
     [int]$Puntos = 20,
-    [int]$Intervalo = 3
+    [int]$Intervalo = 3,
+    [ValidateSet("manual", "voz", "pulso", "carrera")]
+    [string]$Trigger = "manual"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +21,7 @@ try {
     $sos = @{
         id = $id
         name = $Nombre
+        trigger = $Trigger
         lat = $latitudBase
         lng = $longitudBase
         timestamp = $timestamp

@@ -33,10 +33,30 @@ test("inicia una emergencia y la muestra como activa", async () => {
   const started = await request(app).post("/api/sos").send(emergency).expect(201);
   assert.equal(started.body.status, "active");
   assert.equal(started.body.id, emergency.id);
+  assert.equal(started.body.trigger, "manual");
 
   const active = await request(app).get("/api/sos/active").expect(200);
   assert.equal(active.body.emergencies.length, 1);
   assert.equal(active.body.emergencies[0].name, emergency.name);
+  assert.equal(active.body.emergencies[0].trigger, "manual");
+});
+
+test("acepta y conserva triggers válidos, y rechaza valores inválidos", async () => {
+  const freshApp = createApp();
+  const started = await request(freshApp)
+    .post("/api/sos")
+    .send({ ...emergency, id: "voice-trigger-test", trigger: "voz" })
+    .expect(201);
+  assert.equal(started.body.trigger, "voz");
+
+  const active = await request(freshApp).get("/api/sos/active").expect(200);
+  assert.equal(active.body.emergencies[0].trigger, "voz");
+
+  await request(freshApp)
+    .post("/api/sos")
+    .send({ ...emergency, id: "invalid-trigger-test", trigger: "desconocido" })
+    .expect(400)
+    .expect({ error: "Datos de emergencia inválidos." });
 });
 
 test("actualiza la ubicación de una emergencia activa", async () => {
@@ -175,6 +195,7 @@ test("SSE envía snapshot y sos-created, y cierra la conexión de prueba", async
     const streamed = await createdPromise;
     assert.equal(streamed.id, created.body.id);
     assert.equal(streamed.track.length, 1);
+    assert.equal(streamed.trigger, "manual");
   } finally {
     if (client) client.destroy();
     if (streamResponse) streamResponse.destroy();

@@ -45,8 +45,10 @@ function createApp() {
 
   app.post("/api/sos", (request, response) => {
     const { id, name, lat, lng, timestamp, accuracy } = request.body ?? {};
+    const trigger = request.body?.trigger ?? "manual";
     if (
       (id !== undefined && (typeof id !== "string" || id.length > 80)) ||
+      !["manual", "voz", "pulso", "carrera"].includes(trigger) ||
       typeof name !== "string" ||
       !name.trim() ||
       name.trim().length > 80 ||
@@ -66,6 +68,7 @@ function createApp() {
     const emergency = {
       id: emergencyId,
       name: name.trim(),
+      trigger,
       lat,
       lng,
       accuracy: accuracy ?? null,
