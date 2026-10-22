@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SOS Wear - Contacto",
+    "name": "SOS Wear Contacto",
     "slug": "contacto",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,12 +10,25 @@
       "supportsTablet": true
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0D0F14",
+          "dark": {
+            "backgroundColor": "#0D0F14"
+          }
+        }
+      ],
       "expo-notifications",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-splash-screen"
     ],
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0D0F14",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

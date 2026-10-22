@@ -19,6 +19,7 @@ export type Emergency = {
   acknowledgedBy: string | null;
   acknowledgedAt: string | null;
   track: LocationPoint[];
+  trigger?: "manual" | "voz" | "pulso" | "carrera";
 };
 
 export type ActiveResponse = {
@@ -61,6 +62,11 @@ export function isEmergency(value: unknown): value is Emergency {
       typeof value.finishedAt === "string") &&
     (value.acknowledgedBy === null || typeof value.acknowledgedBy === "string") &&
     (value.acknowledgedAt === null || typeof value.acknowledgedAt === "string") &&
+    (value.trigger === undefined ||
+      value.trigger === "manual" ||
+      value.trigger === "voz" ||
+      value.trigger === "pulso" ||
+      value.trigger === "carrera") &&
     Array.isArray(value.track) &&
     value.track.every(isLocationPoint)
   );

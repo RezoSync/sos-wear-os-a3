@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import type { Emergency } from "./types";
+import { theme } from "./theme";
 
 const MAP_HTML = `<!doctype html>
 <html lang="es">
@@ -9,16 +10,18 @@ const MAP_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
   <style>
-    html, body, #map { height: 100%; width: 100%; margin: 0; background: #17191f; }
-    .leaflet-container { background: #17191f; font-family: sans-serif; }
-    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #22252d; color: #f7f7f8; }
+    html, body, #map { height: 100%; width: 100%; margin: 0; background: ${theme.colors.background}; }
+    .leaflet-container { background: ${theme.colors.background}; font-family: sans-serif; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: ${theme.colors.surfaceRaised}; color: ${theme.colors.text}; }
     .leaflet-control-attribution { font-size: 9px !important; }
+    .sos-marker-pulse { animation: markerPulse 1.7s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+    @keyframes markerPulse { 0% { stroke-width: 3; stroke-opacity: 1; } 100% { stroke-width: 14; stroke-opacity: 0; } }
     #map-error {
       display: none;
       height: 100%;
       align-items: center;
       justify-content: center;
-      color: #f7f7f8;
+      color: ${theme.colors.text};
       font: 16px sans-serif;
       text-align: center;
     }
@@ -80,7 +83,7 @@ const MAP_HTML = `<!doctype html>
           let marker = markers.get(emergency.id);
           if (!marker) {
             marker = L.circleMarker(location, {
-              radius: 9, color: '#ff3347', weight: 3, fillColor: '#ff3347', fillOpacity: 0.9
+              radius: 10, color: '${theme.colors.red}', weight: 3, fillColor: '${theme.colors.red}', fillOpacity: 0.95, className: 'sos-marker-pulse'
             }).addTo(map);
             markers.set(emergency.id, marker);
           } else {
@@ -94,7 +97,7 @@ const MAP_HTML = `<!doctype html>
             if (path) {
               path.setLatLngs(points);
             } else {
-              path = L.polyline(points, { color: '#ff5263', weight: 4, opacity: 0.8 }).addTo(map);
+              path = L.polyline(points, { color: '${theme.colors.red}', weight: 4, opacity: 0.85 }).addTo(map);
               paths.set(emergency.id, path);
             }
           } else if (path) {
@@ -196,7 +199,7 @@ const styles = StyleSheet.create({
     height: 270,
     overflow: "hidden",
     borderRadius: 18,
-    backgroundColor: "#17191f",
+    backgroundColor: theme.colors.background,
   },
-  map: { backgroundColor: "#17191f" },
+  map: { backgroundColor: theme.colors.background },
 });

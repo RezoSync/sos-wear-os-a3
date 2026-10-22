@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ack, getActive } from "./src/api";
+import { ActionButton, Card, StatusChip } from "./src/components";
 import { EmergencyMap } from "./src/EmergencyMap";
 import {
   DEFAULT_SETTINGS,
@@ -26,6 +27,7 @@ import {
 } from "./src/settings";
 import type { Emergency } from "./src/types";
 import { useSosFeed } from "./src/useSosFeed";
+import { theme } from "./src/theme";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -46,6 +48,27 @@ function formatTime(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Hora no disponible";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatRelative(value: string, now: number): string {
+  const elapsed = Math.max(0, Math.floor((now - Date.parse(value)) / 1_000));
+  if (!Number.isFinite(elapsed)) return "hora no disponible";
+  if (elapsed < 60) return `hace ${elapsed} s`;
+  if (elapsed < 3_600) return `hace ${Math.floor(elapsed / 60)} min`;
+  return `hace ${Math.floor(elapsed / 3_600)} h`;
+}
+
+function triggerLabel(trigger: Emergency["trigger"]): string {
+  switch (trigger) {
+    case "voz":
+      return "Voz";
+    case "pulso":
+      return "Pulso anómalo";
+    case "carrera":
+      return "Carrera";
+    default:
+      return "Manual";
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -70,6 +93,12 @@ function AppContent() {
   const [connectionTest, setConnectionTest] = useState<string | null>(null);
   const [testingConnection, setTestingConnection] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -135,8 +164,8 @@ function AppContent() {
     Vibration.vibrate([0, 900, 350, 900]);
     void Notifications.scheduleNotificationAsync({
       content: {
-        title: `¡SOS de ${emergency.name}!`,
-        body: `Ubicación: ${emergency.lat.toFixed(5)}, ${emergency.lng.toFixed(5)}`,
+        title: `¡SOS ${triggerLabel(emergency.trigger)} de ${emergency.name}!`,
+        body: `Motivo: ${triggerLabel(emergency.trigger)} · ${emergency.lat.toFixed(5)}, ${emergency.lng.toFixed(5)}`,
         sound: "default",
         ...(Platform.OS === "android" ? { channelId: "sos" } : {}),
       },
@@ -230,7 +259,9 @@ function AppContent() {
     <View style={styles.alertBanner}>
       <View style={styles.alertBannerText}>
         <Text style={styles.alertBannerTitle}>¡Nueva emergencia!</Text>
-        <Text style={styles.alertBannerDescription}>{newAlert.name} necesita ayuda.</Text>
+        <Text style={styles.alertBannerDescription}>
+          {triggerLabel(newAlert.trigger)} · {newAlert.name} necesita ayuda.
+        </Text>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -305,21 +336,14 @@ function AppContent() {
       </View>
 
       <View style={styles.connectionPanel}>
-        <View
-          style={[
-            styles.connectionDot,
-            feed.conexion === "en-vivo" && styles.connectionDotLive,
-            feed.conexion === "sin-conexion" && styles.connectionDotOffline,
-          ]}
-        />
         <View style={styles.connectionTextBlock}>
-          <Text style={styles.connectionTitle}>
-            {feed.conexion === "en-vivo"
-              ? "En vivo"
-              : feed.conexion === "reconectando"
-                ? "Reconectando"
-                : "Sin conexión"}
-          </Text>
+          <StatusChip
+            label={feed.conexion === "en-vivo" ? "En vivo" :
+              feed.conexion === "reconectando" ? "Reconectando" : "Sin conexión"}
+            tone={feed.conexion === "en-vivo" ? "green" :
+              feed.conexion === "reconectando" ? "amber" : "red"}
+            pulse={feed.conexion === "en-vivo"}
+          />
           <Text style={styles.mutedText}>
             Actualizado: {formatTime(feed.ultimaActualizacion)}
           </Text>
@@ -341,7 +365,11 @@ function AppContent() {
         focusRequest={mapFocusRequest}
       />
       {feed.activas.length === 0 ? (
-        <Text style={styles.emptyText}>Sin alertas activas</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>◉</Text>
+          <Text style={styles.emptyText}>Sin alertas activas</Text>
+          <Text style={styles.mutedText}>Las nuevas emergencias aparecerán aquí.</Text>
+        </View>
       ) : null}
     </View>
   );
@@ -361,7 +389,7 @@ function AppContent() {
     const hasAcknowledged =
       Boolean(emergency.acknowledgedBy) || acknowledgedIds.includes(emergency.id);
     return (
-      <View style={[styles.card, !active && styles.finalizedCard]}>
+      <Card style={!active && styles.finalizedCard}>
         <Pressable
           accessibilityRole="button"
           onPress={() => {
@@ -369,11 +397,19 @@ function AppContent() {
           }}
         >
           <View style={styles.cardHeader}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{emergency.name.trim().charAt(0).toLocaleUpperCase()}</Text>
+            </View>
             <View style={styles.cardHeading}>
               <Text style={styles.personName}>{emergency.name}</Text>
-              <Text style={[styles.status, active ? styles.activeStatus : styles.finalizedStatus]}>
-                {active ? "SOS ACTIVO" : "Finalizada"}
-              </Text>
+              <View style={styles.chipRow}>
+                <StatusChip
+                  label={active ? "SOS ACTIVO" : "Finalizada"}
+                  tone={active ? "red" : "neutral"}
+                  pulse={active}
+                />
+                <StatusChip label={triggerLabel(emergency.trigger)} tone="amber" />
+              </View>
             </View>
             <Text style={styles.coordinates}>
               {emergency.lat.toFixed(5)}, {emergency.lng.toFixed(5)}
@@ -385,6 +421,9 @@ function AppContent() {
           <Text style={styles.detailText}>
             Última ubicación: {formatTime(emergency.lastLocationAt)}
           </Text>
+          <Text style={styles.relativeTime}>
+            {formatRelative(emergency.lastLocationAt, now)}
+          </Text>
           {emergency.acknowledgedBy ? (
             <Text style={styles.acknowledgedText}>
               Contacto en camino: {emergency.acknowledgedBy}
@@ -393,34 +432,18 @@ function AppContent() {
         </Pressable>
         {active ? (
           <View style={styles.actions}>
-            <Pressable style={styles.secondaryButton} onPress={() => void callContact()}>
-              <Text style={styles.secondaryButtonText}>Llamar</Text>
-            </Pressable>
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => void openDirections(emergency)}
-            >
-              <Text style={styles.secondaryButtonText}>Cómo llegar</Text>
-            </Pressable>
-            <Pressable
+            <ActionButton label="Llamar" icon="☎" onPress={() => void callContact()} />
+            <ActionButton label="Cómo llegar" icon="↗" onPress={() => void openDirections(emergency)} />
+            <ActionButton
+              label={hasAcknowledged ? "En camino" : ackingId === emergency.id ? "Enviando…" : "Voy en camino"}
+              icon="✓"
+              primary
               disabled={hasAcknowledged || ackingId === emergency.id}
-              style={[
-                styles.primaryButton,
-                hasAcknowledged && styles.disabledButton,
-              ]}
               onPress={() => void acknowledge(emergency)}
-            >
-              <Text style={styles.primaryButtonText}>
-                {hasAcknowledged
-                  ? "Avisaste que vas en camino"
-                  : ackingId === emergency.id
-                    ? "Enviando..."
-                    : "Voy en camino"}
-              </Text>
-            </Pressable>
+            />
           </View>
         ) : null}
-      </View>
+      </Card>
     );
   };
 
@@ -438,6 +461,7 @@ function AppContent() {
             Usa la IP de tu PC en la red Wi-Fi, no localhost.
           </Text>
 
+          <Text style={styles.settingsSectionTitle}>Backend</Text>
           <Text style={styles.inputLabel}>URL del backend</Text>
           <TextInput
             autoCapitalize="none"
@@ -450,6 +474,7 @@ function AppContent() {
             style={styles.input}
           />
 
+          <Text style={styles.settingsSectionTitle}>Contacto</Text>
           <Text style={styles.inputLabel}>Nombre del contacto</Text>
           <TextInput
             maxLength={80}
@@ -470,6 +495,7 @@ function AppContent() {
             style={styles.input}
           />
 
+          <Text style={styles.settingsSectionTitle}>Conectividad</Text>
           <Pressable
             disabled={testingConnection}
             style={styles.secondaryWideButton}
@@ -530,7 +556,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#101116" },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background },
   listContent: { paddingHorizontal: 18, paddingBottom: 36 },
   topBar: {
     minHeight: 76,
@@ -539,12 +565,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   brandBlock: { gap: 2 },
-  brand: { color: "#ff3347", fontSize: 19, fontWeight: "900", letterSpacing: 1.5 },
-  subtitle: { color: "#a8abb5", fontSize: 13 },
+  brand: { color: theme.colors.red, fontSize: 19, fontWeight: "900", letterSpacing: 1.5 },
+  subtitle: { color: theme.colors.muted, fontSize: 13 },
   settingsButton: {
     paddingVertical: 10,
     paddingHorizontal: 13,
-    borderColor: "#363943",
+    borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: 12,
   },
@@ -553,26 +579,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 11,
-    backgroundColor: "#1b1d24",
-    borderRadius: 15,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.card,
     padding: 14,
     marginTop: 5,
     marginBottom: 14,
   },
-  connectionDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#f2a93b" },
-  connectionDotLive: { backgroundColor: "#33cf83" },
-  connectionDotOffline: { backgroundColor: "#ff3347" },
-  connectionTextBlock: { gap: 2 },
-  connectionTitle: { color: "#f7f7f8", fontSize: 14, fontWeight: "800" },
-  mutedText: { color: "#999da8", fontSize: 12 },
+  connectionTextBlock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flex: 1, gap: 8 },
+  mutedText: { color: theme.colors.muted, fontSize: 12 },
   sectionHeading: {
-    color: "#f3f3f5",
+    color: theme.colors.text,
     fontSize: 18,
     fontWeight: "800",
     marginTop: 7,
     marginBottom: 12,
   },
-  emptyText: { color: "#a8abb5", textAlign: "center", marginVertical: 18, fontSize: 14 },
+  emptyState: { alignItems: "center", paddingVertical: 20, marginTop: 8, marginBottom: 6, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.card, backgroundColor: theme.colors.surface },
+  emptyIcon: { color: theme.colors.muted, fontSize: 28, marginBottom: 6 },
+  emptyText: { color: theme.colors.text, textAlign: "center", marginBottom: 5, fontSize: 14, fontWeight: "700" },
   listSection: {
     flexDirection: "row",
     alignItems: "center",
@@ -580,10 +604,10 @@ const styles = StyleSheet.create({
     marginTop: 22,
     marginBottom: 10,
   },
-  listSectionTitle: { color: "#f3f3f5", fontSize: 17, fontWeight: "800" },
+  listSectionTitle: {   color: theme.colors.text, fontSize: 17, fontWeight: "800" },
   listSectionCount: {
     color: "#b7bac3",
-    backgroundColor: "#292c35",
+    backgroundColor: theme.colors.surfaceRaised,
     minWidth: 23,
     textAlign: "center",
     overflow: "hidden",
@@ -596,26 +620,27 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 11,
     borderRadius: 17,
-    backgroundColor: "#1b1d24",
-    borderColor: "#3b2027",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
     borderWidth: 1,
   },
-  finalizedCard: { borderColor: "#30323a", opacity: 0.82 },
-  cardHeader: { marginBottom: 8 },
+  finalizedCard: { borderColor: theme.colors.border, opacity: 0.82 },
+  cardHeader: { marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 45, height: 45, borderRadius: 23, backgroundColor: `${theme.colors.red}22`, borderWidth: 1, borderColor: `${theme.colors.red}66`, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: theme.colors.red, fontSize: 20, fontWeight: "900" },
   cardHeading: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 5,
+    flex: 1,
+    gap: 7,
   },
-  personName: { color: "#f5f5f7", fontSize: 16, fontWeight: "800", flexShrink: 1 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  personName: { color: theme.colors.text, fontSize: 16, fontWeight: "800", flexShrink: 1 },
   status: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
-  activeStatus: { color: "#ff5263" },
-  finalizedStatus: { color: "#a7a9b2" },
-  coordinates: { color: "#d6d7dc", fontSize: 13, fontVariant: ["tabular-nums"] },
-  detailText: { color: "#a8abb5", fontSize: 12, marginTop: 3 },
-  acknowledgedText: { color: "#61d69a", fontSize: 13, fontWeight: "700", marginTop: 9 },
+  activeStatus: { color: theme.colors.red },
+  finalizedStatus: { color: theme.colors.muted },
+  coordinates: { color: "#D6DAE2", fontSize: 13, fontVariant: ["tabular-nums"] },
+  detailText: { color: theme.colors.muted, fontSize: 12, marginTop: 3 },
+  relativeTime: { color: theme.colors.amber, fontSize: 11, marginTop: 4 },
+  acknowledgedText: { color: theme.colors.green, fontSize: 13, fontWeight: "700", marginTop: 9 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
   secondaryButton: {
     paddingVertical: 10,
@@ -638,8 +663,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#b51f32",
-    borderRadius: 14,
+    backgroundColor: theme.colors.redDark,
+    borderRadius: theme.radii.control,
     padding: 13,
     marginBottom: 16,
   },
@@ -648,19 +673,20 @@ const styles = StyleSheet.create({
   alertBannerDescription: { color: "#ffe7e9", fontSize: 12 },
   alertViewButton: { paddingVertical: 8, paddingHorizontal: 16 },
   alertViewButtonText: { color: "white", fontWeight: "900", fontSize: 14 },
-  errorText: { color: "#ff8792", fontSize: 12, marginBottom: 12 },
-  warningText: { color: "#ffca73", fontSize: 12, marginBottom: 12 },
-  successText: { color: "#61d69a", fontSize: 13, marginTop: 12 },
+  errorText: { color: theme.colors.red, fontSize: 12, marginBottom: 12 },
+  warningText: { color: theme.colors.amber, fontSize: 12, marginBottom: 12 },
+  successText: { color: theme.colors.green, fontSize: 13, marginTop: 12 },
   settingsPage: { paddingHorizontal: 20, paddingBottom: 36 },
   backButton: { paddingVertical: 14, alignSelf: "flex-start" },
   backButtonText: { color: "#ff6978", fontSize: 15, fontWeight: "700" },
-  pageTitle: { color: "#f7f7f8", fontSize: 27, fontWeight: "900", marginTop: 9 },
-  helpText: { color: "#b5b8c1", fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 22 },
-  inputLabel: { color: "#e3e4e8", fontSize: 13, fontWeight: "700", marginBottom: 7 },
+  pageTitle: { color: theme.colors.text, fontSize: 27, fontWeight: "900", marginTop: 9 },
+  helpText: { color: theme.colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 22 },
+  settingsSectionTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "800", marginTop: 8, marginBottom: 13 },
+  inputLabel: { color: theme.colors.text, fontSize: 13, fontWeight: "700", marginBottom: 7 },
   input: {
     color: "#fff",
-    backgroundColor: "#1b1d24",
-    borderColor: "#383b45",
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: 12,
     minHeight: 49,
@@ -678,7 +704,7 @@ const styles = StyleSheet.create({
   },
   primaryWideButton: {
     alignItems: "center",
-    backgroundColor: "#c82137",
+    backgroundColor: theme.colors.redDark,
     borderRadius: 12,
     paddingVertical: 15,
     marginTop: 17,
