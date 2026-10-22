@@ -15,6 +15,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +41,7 @@ import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.ToggleChip
@@ -42,9 +49,12 @@ import androidx.wear.compose.material.Switch
 import com.example.soswear.data.SosSettings
 import com.example.soswear.data.SosUiState
 import com.example.soswear.viewmodel.SosAppState
+import com.example.soswear.ui.theme.SosColors
+import com.example.soswear.ui.theme.SosSpacing
+import com.example.soswear.ui.theme.SosType
 import java.util.Locale
 
-private val SosRed = Color(0xFFE53935)
+private val SosRed = SosColors.sos
 
 @Composable
 fun HomeScreen(
@@ -53,30 +63,42 @@ fun HomeScreen(
     onSettings: () -> Unit,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
+    val pulse = rememberInfiniteTransition(label = "sos-home-pulse")
+    val buttonScale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.035f,
+        animationSpec = infiniteRepeatable(tween(1_700), RepeatMode.Reverse),
+        label = "button-scale",
+    )
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(
+            start = SosSpacing.screenHorizontal,
+            top = SosSpacing.screenVertical,
+            end = SosSpacing.screenHorizontal,
+            bottom = SosSpacing.screenVertical,
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Bottom,
+        verticalArrangement = Arrangement.Center,
         userScrollEnabled = false,
     ) {
         item {
             Text(
                 "Mantén pulsado",
                 textAlign = TextAlign.Center,
-                fontSize = 11.sp,
+                style = SosType.caption,
                 maxLines = 1,
                 color = MaterialTheme.colors.onBackground.copy(alpha = 0.75f),
             )
         }
         item {
             Text(
-                text = "Configuración",
+                text = "⚙",
                 modifier = Modifier
                     .clickable(role = Role.Button, onClick = onSettings)
                     .padding(vertical = 4.dp),
-                fontSize = 11.sp,
-                color = MaterialTheme.colors.onBackground.copy(alpha = 0.75f),
+                fontSize = 16.sp,
+                color = SosColors.muted,
                 maxLines = 1,
             )
         }
@@ -84,7 +106,7 @@ fun HomeScreen(
             item {
                 Text(
                     state.session.message,
-                    color = Color(0xFFFFC857),
+                    color = SosColors.warning,
                     textAlign = TextAlign.Center,
                     fontSize = 11.sp,
                 )
@@ -96,12 +118,26 @@ fun HomeScreen(
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                     onStartSos()
                 },
-                modifier = Modifier.size(80.dp),
+                modifier = Modifier
+                    .size(78.dp)
+                    .graphicsLayer {
+                        scaleX = buttonScale
+                        scaleY = buttonScale
+                    },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(backgroundColor = SosRed),
             ) {
                 Text("SOS", fontSize = 26.sp, fontWeight = FontWeight.Bold)
             }
+        }
+        item {
+            Text(
+                "Backend · ${state.session.connectionStatus}",
+                color = SosColors.muted,
+                fontSize = 9.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -113,25 +149,37 @@ fun ConfirmationScreen(
 ) {
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = SosSpacing.screenVertical),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         item {
-            Text("ENVIANDO SOS", color = SosRed, fontWeight = FontWeight.Bold)
+            Text("CONFIRMA SOS", color = SosRed, fontWeight = FontWeight.Bold)
         }
         item {
-            Text(
-                if (session.isCountingDown) session.countdownSeconds.toString() else "!",
-                fontSize = 54.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(94.dp)) {
+                CircularProgressIndicator(
+                    progress = if (session.trigger == "manual") {
+                        session.countdownSeconds.coerceIn(0, 5) / 5f
+                    } else {
+                        session.countdownSeconds.coerceIn(0, 10) / 10f
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    indicatorColor = SosRed,
+                    trackColor = Color(0xFF3A2426),
+                    strokeWidth = 5.dp,
+                )
+                Text(
+                    if (session.isCountingDown) session.countdownSeconds.toString() else "!",
+                    style = SosType.hero,
+                )
+            }
         }
         item {
             Text(
                 session.message ?: "La emergencia inicia al terminar la cuenta regresiva.",
                 textAlign = TextAlign.Center,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
             )
         }
         item {
@@ -158,18 +206,28 @@ fun ActiveSosScreen(
 ) {
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(
+            horizontal = SosSpacing.screenHorizontal,
+            vertical = SosSpacing.screenVertical,
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         item {
-            Text("SOS ACTIVO", color = SosRed, fontWeight = FontWeight.Bold)
+            val pulse = rememberInfiniteTransition(label = "sos-active-pulse")
+            val alpha by pulse.animateFloat(
+                initialValue = 1f,
+                targetValue = 0.45f,
+                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                label = "active-alpha",
+            )
+            Text("● SOS ACTIVO", color = SosRed, fontWeight = FontWeight.Bold, modifier = Modifier.graphicsLayer { this.alpha = alpha })
         }
         session.contactoEnCamino?.let { name ->
             item {
                 Text(
                     "✓ $name va en camino",
-                    color = Color(0xFF43D17A),
+                    color = SosColors.confirmation,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -208,7 +266,7 @@ fun ActiveSosScreen(
             item {
                 Text(
                     "Último error: $error",
-                    color = Color(0xFFFF777D),
+                    color = SosRed,
                     fontSize = 10.sp,
                     textAlign = TextAlign.Center,
                 )
@@ -216,7 +274,7 @@ fun ActiveSosScreen(
         }
         session.message?.let { message ->
             item {
-                Text(message, color = Color(0xFFFFC857), fontSize = 10.sp, textAlign = TextAlign.Center)
+                Text(message, color = SosColors.warning, fontSize = 10.sp, textAlign = TextAlign.Center)
             }
         }
         item {
@@ -244,7 +302,7 @@ fun SettingsScreen(
 
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = SosSpacing.screenVertical),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
