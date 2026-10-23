@@ -114,16 +114,22 @@ La detección de voz requiere permiso de micrófono y un servicio de reconocimie
 
 ## Checklist de pruebas
 
-- [ ] Inicio SOS manual: 5 s, cancelar no crea emergencia y confirmar envía `trigger: manual`.
-- [ ] Simular auxilio, pulso anómalo y carrera: cada botón muestra su motivo, cuenta 10 s y permite cancelar.
+- [x] El SOS manual iniciado desde el reloj llega al celular.
+- [x] La alerta suena y vibra en el iPhone.
+- [x] “Voy en camino” aparece en el reloj.
+- [x] **Detener SOS** pasa la emergencia a **Finalizada**.
+- [x] Cancelar la cuenta regresiva no envía nada.
+- [x] **Simular: auxilio** en modo prueba envía el SOS con motivo voz.
+- [ ] Verificar que **Simular: pulso anómalo** y **Simular: carrera** envían el SOS con el motivo correspondiente.
 - [ ] Activar y desactivar cada detección, reiniciar la app y confirmar persistencia; verificar permisos y notificación visible.
 - [ ] Con `-Trigger carrera`, verificar que el backend, SSE, contacto y dashboard muestran el motivo correcto.
-- [ ] El contacto recibe el SOS y la notificación local muestra el motivo.
-- [ ] **Voy en camino** actualiza la app/dashboard y el reloj muestra el nombre; comprobar una sola respuesta háptica por emergencia.
-- [ ] Detener el SOS en el reloj: aparece como finalizado en el contacto y dashboard.
+- [ ] Verificar que **Voy en camino** actualiza el dashboard y que el reloj muestra el nombre; comprobar una sola respuesta háptica por emergencia.
+- [ ] Verificar que al detener el SOS aparece como finalizado en el dashboard.
 - [ ] Con backend desconectado, observar reintento del reloj y reconexión del dashboard.
 - [ ] Probar diseño en Wear OS Small Round y en el iPhone, incluyendo safe areas y estados vacíos.
 - [ ] Probar voz y sensores en hardware compatible; registrar si el reconocimiento/sensor no está disponible.
+
+Voz real, pulso y carrera dependen de micrófono y sensores; en emulador se demuestran con el modo prueba.
 
 ## Guion breve para grabar la demostración (10 pasos)
 
